@@ -6,58 +6,16 @@ const props = defineProps({
   }
 })
 
+const { sourceUploadFile, sourceListFiles, sourceDeleteFile } = useExternalBackend()
+
 // Tabs
 const currentTab = ref('listas')
 
-// Datos simulados de archivos
-const files = ref([
-  {
-    id: 1,
-    name: '22.09.2025 Lista Precios CORESA Septiembre.xlsx',
-    size: '2.4 MB',
-    uploadedAt: '2025-09-22',
-    uploadedBy: 'Juan Pérez'
-  },
-  {
-    id: 2,
-    name: '27.08.2025 Lista Precios CORESA Agosto.xlsx',
-    size: '2.1 MB',
-    uploadedAt: '2025-08-27',
-    uploadedBy: 'María González'
-  },
-  {
-    id: 3,
-    name: '15.07.2025 Lista Precios CORESA Julio.xlsx',
-    size: '2.3 MB',
-    uploadedAt: '2025-07-15',
-    uploadedBy: 'Juan Pérez'
-  }
-])
+// Archivos (se cargarán desde el backend)
+const files = ref([])
+const loading = ref(false)
+const error = ref(null)
 
-// Datos simulados de logs
-const logs = ref([
-  {
-    id: 1,
-    action: 'Archivo subido',
-    fileName: '22.09.2025 Lista Precios CORESA Septiembre.xlsx',
-    user: 'Juan Pérez',
-    timestamp: '2025-09-22T10:30:00'
-  },
-  {
-    id: 2,
-    action: 'Archivo eliminado',
-    fileName: '01.08.2025 Lista Precios CORESA Agosto.xlsx',
-    user: 'María González',
-    timestamp: '2025-08-28T15:45:00'
-  },
-  {
-    id: 3,
-    action: 'Archivo descargado',
-    fileName: '27.08.2025 Lista Precios CORESA Agosto.xlsx',
-    user: 'Juan Pérez',
-    timestamp: '2025-08-27T09:15:00'
-  }
-])
 
 const fileInput = ref(null)
 const uploadDialog = ref(false)
@@ -65,6 +23,35 @@ const deleteDialog = ref(false)
 const fileToDelete = ref(null)
 const uploading = ref(false)
 const deleting = ref(false)
+
+// Cargar archivos al montar el componente
+const loadFiles = async () => {
+  try {
+    loading.value = true
+    error.value = null
+    const result = await sourceListFiles(props.source.name)
+    
+    // Transformar los archivos al formato esperado por el template
+    files.value = result.files.map(file => ({
+      id: file.filename,
+      name: file.filename,
+      size: formatFileSize(file.size),
+      uploadedAt: file.createdAt,
+      modifiedAt: file.modifiedAt,
+      path: file.path
+    }))
+  } catch (err) {
+    console.error('Error cargando archivos:', err)
+    error.value = err.message || 'Error al cargar los archivos'
+  } finally {
+    loading.value = false
+  }
+}
+
+// Cargar archivos al montar
+onMounted(() => {
+  loadFiles()
+})
 
 const openFileUpload = () => {
   fileInput.value.click()
@@ -77,27 +64,29 @@ const handleFileSelect = async (event) => {
   uploadDialog.value = true
   uploading.value = true
 
-  // Simular subida
-  await new Promise(resolve => setTimeout(resolve, 1500))
+  try {
+    // Subir cada archivo al backend
+    for (const file of selectedFiles) {
+      await sourceUploadFile(props.source.name, file)
+    }
 
-  // Agregar archivos simulados
-  for (const file of selectedFiles) {
-    files.value.unshift({
-      id: Date.now() + Math.random(),
-      name: file.name,
-      size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-      uploadedAt: new Date().toISOString().split('T')[0],
-      uploadedBy: 'Usuario Actual'
-    })
-  }
+    // Recargar la lista de archivos
+    await loadFiles()
 
-  uploading.value = false
-  
-  // Cerrar diálogo después de un momento
-  setTimeout(() => {
+    uploading.value = false
+    
+    // Cerrar diálogo después de un momento
+    setTimeout(() => {
+      uploadDialog.value = false
+      fileInput.value.value = ''
+    }, 800)
+  } catch (err) {
+    console.error('Error subiendo archivos:', err)
+    uploading.value = false
     uploadDialog.value = false
     fileInput.value.value = ''
-  }, 800)
+    error.value = err.message || 'Error al subir los archivos'
+  }
 }
 
 const confirmDelete = (file) => {
@@ -110,14 +99,28 @@ const deleteFile = async () => {
 
   deleting.value = true
 
-  // Simular eliminación
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  try {
+    await sourceDeleteFile(props.source.name, fileToDelete.value.name)
+    
+    // Recargar la lista de archivos
+    await loadFiles()
+    
+    deleting.value = false
+    deleteDialog.value = false
+    fileToDelete.value = null
+  } catch (err) {
+    console.error('Error eliminando archivo:', err)
+    deleting.value = false
+    error.value = err.message || 'Error al eliminar el archivo'
+  }
+}
 
-  files.value = files.value.filter(f => f.id !== fileToDelete.value.id)
-  
-  deleting.value = false
-  deleteDialog.value = false
-  fileToDelete.value = null
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
 }
 
 const formatDate = (dateString) => {
@@ -129,34 +132,22 @@ const formatDate = (dateString) => {
   })
 }
 
-const formatDateTime = (dateTimeString) => {
-  const date = new Date(dateTimeString)
-  return date.toLocaleString('es-ES', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-const getLogIcon = (action) => {
-  if (action.includes('subido')) return 'mdi-upload'
-  if (action.includes('eliminado')) return 'mdi-delete'
-  if (action.includes('descargado')) return 'mdi-download'
-  return 'mdi-information'
-}
-
-const getLogColor = (action) => {
-  if (action.includes('subido')) return 'success'
-  if (action.includes('eliminado')) return 'error'
-  if (action.includes('descargado')) return 'info'
-  return 'grey'
-}
 </script>
 
 <template>
   <div class="file-source-content">
+    <!-- Error Alert -->
+    <v-alert
+      v-if="error"
+      type="error"
+      variant="tonal"
+      closable
+      @click:close="error = null"
+      class="mb-4"
+    >
+      {{ error }}
+    </v-alert>
+
     <!-- Tabs -->
     <v-tabs v-model="currentTab" bg-color="transparent" color="primary" class="mb-4">
       <v-tab value="listas">Listas Excel</v-tab>
@@ -173,12 +164,20 @@ const getLogColor = (action) => {
             prepend-icon="mdi-upload"
             @click="openFileUpload"
             elevation="0"
+            :disabled="uploading || loading"
           >
             Subir Archivo
           </v-btn>
         </div>
 
-        <v-list bg-color="transparent" class="pa-0">
+        <!-- Loading indicator -->
+        <div v-if="loading" class="text-center pa-8">
+          <v-progress-circular indeterminate color="primary" />
+          <p class="mt-4 text-grey">Cargando archivos...</p>
+        </div>
+
+        <!-- Files list -->
+        <v-list v-else bg-color="transparent" class="pa-0">
           <v-list-item
             v-for="file in files"
             :key="file.id"
@@ -195,7 +194,7 @@ const getLogColor = (action) => {
               {{ file.name }}
             </v-list-item-title>
             <v-list-item-subtitle class="text-caption">
-              {{ file.size }} • Subido el {{ formatDate(file.uploadedAt) }} por {{ file.uploadedBy }}
+              {{ file.size }} • Subido el {{ formatDate(file.uploadedAt) }}
             </v-list-item-subtitle>
 
             <template v-slot:append>
@@ -217,7 +216,7 @@ const getLogColor = (action) => {
             </template>
           </v-list-item>
 
-          <div v-if="files.length === 0" class="text-center pa-8 text-grey">
+          <div v-if="files.length === 0 && !loading" class="text-center pa-8 text-grey">
             No hay archivos disponibles
           </div>
         </v-list>
@@ -225,34 +224,7 @@ const getLogColor = (action) => {
 
       <!-- Logs Tab -->
       <v-window-item value="logs">
-        <v-list bg-color="transparent" class="pa-0">
-          <v-list-item
-            v-for="log in logs"
-            :key="log.id"
-            class="log-item px-4 py-3 mb-2"
-            rounded="lg"
-          >
-            <template v-slot:prepend>
-              <v-avatar :color="getLogColor(log.action)" variant="tonal" size="40">
-                <v-icon :icon="getLogIcon(log.action)" size="20" />
-              </v-avatar>
-            </template>
-
-            <v-list-item-title class="font-weight-medium mb-1">
-              {{ log.action }}
-            </v-list-item-title>
-            <v-list-item-subtitle class="text-caption">
-              {{ log.fileName }}
-            </v-list-item-subtitle>
-            <v-list-item-subtitle class="text-caption mt-1">
-              {{ formatDateTime(log.timestamp) }} • {{ log.user }}
-            </v-list-item-subtitle>
-          </v-list-item>
-
-          <div v-if="logs.length === 0" class="text-center pa-8 text-grey">
-            No hay registros de actividad
-          </div>
-        </v-list>
+        <ProviderSourceLogs :source="source" />
       </v-window-item>
     </v-window>
 
@@ -292,8 +264,8 @@ const getLogColor = (action) => {
         </v-card-title>
         <v-card-text>
           ¿Estás seguro de que deseas eliminar el archivo 
-          <strong>{{ fileToDelete?.name }}</strong>?
-          Esta acción no se puede deshacer.
+          <strong>{{ fileToDelete?.name }}</strong>?  
+          Eliminar un archivo sincroniza con el archivo anterior.
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -331,15 +303,6 @@ const getLogColor = (action) => {
 .file-item:hover {
   background-color: rgba(var(--v-theme-primary), 0.05);
   transform: translateX(4px);
-}
-
-.log-item {
-  background-color: rgb(var(--v-theme-surface));
-  transition: all 0.2s ease;
-}
-
-.log-item:hover {
-  background-color: rgba(var(--v-theme-primary), 0.03);
 }
 </style>
 

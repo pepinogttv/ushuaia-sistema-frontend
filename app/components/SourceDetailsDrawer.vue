@@ -20,6 +20,7 @@ const isOpen = computed({
 
 <template>
   <v-navigation-drawer
+    v-if="isOpen"
     v-model="isOpen"
     location="right"
     temporary
@@ -44,7 +45,7 @@ const isOpen = computed({
       <!-- Content -->
       <div class="flex-grow-1 pa-6">
         <SourcesFileSource 
-          v-if="source && source.type === 'dir-newest-file'" 
+          v-if="source && source.type === 'file-source'" 
           :source="source" 
         />
         <SourcesWebScraperSource 

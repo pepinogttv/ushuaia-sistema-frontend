@@ -6,5 +6,10 @@ export default defineNuxtConfig({
     '@nuxt/icon',
     'vuetify-nuxt-module',
     '@nuxtjs/supabase'
-  ]
+  ],
+  runtimeConfig: {
+    public: {
+      externalBackendUrl: process.env.EXTERNAL_BACKEND_URL,
+    }
+  }
 })

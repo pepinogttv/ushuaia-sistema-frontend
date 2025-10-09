@@ -12,7 +12,7 @@ const props = defineProps({
     <v-card variant="outlined" class="mb-4">
       <v-card-title class="text-h6">
         <v-icon icon="mdi-web" class="mr-2" color="primary" />
-        Fuente Web Scraper
+        Datos desde la web.
       </v-card-title>
       <v-card-text>
         <v-list dense>
@@ -33,7 +33,7 @@ const props = defineProps({
     </v-card>
 
     <v-alert type="info" variant="tonal">
-      Este source obtiene datos mediante web scraping.
+      Este source obtiene datos desde la web.
     </v-alert>
   </div>
 </template>

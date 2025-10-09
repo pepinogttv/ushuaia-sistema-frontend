@@ -71,9 +71,7 @@ onMounted(() => {
         </v-alert>
 
         <!-- Provider Sources Section -->
-        <div class="mt-6">
-          <h3 class="text-h6 font-weight-bold mb-4">Fuentes del Proveedor</h3>
-          
+        <div>
           <!-- Loading -->
           <div v-if="pending" class="text-center pa-4">
             <v-progress-circular indeterminate color="primary" size="32" />
