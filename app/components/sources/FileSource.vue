@@ -17,7 +17,6 @@ const loading = ref(false)
 const error = ref(null)
 
 
-const fileInput = ref(null)
 const uploadDialog = ref(false)
 const deleteDialog = ref(false)
 const fileToDelete = ref(null)
@@ -53,14 +52,8 @@ onMounted(() => {
   loadFiles()
 })
 
-const openFileUpload = () => {
-  fileInput.value.click()
-}
-
-const handleFileSelect = async (event) => {
-  const selectedFiles = event.target.files
-  if (!selectedFiles || selectedFiles.length === 0) return
-
+// Manejar archivos seleccionados desde el componente FileDropZone
+const handleFilesSelected = async (selectedFiles) => {
   uploadDialog.value = true
   uploading.value = true
 
@@ -78,15 +71,18 @@ const handleFileSelect = async (event) => {
     // Cerrar diálogo después de un momento
     setTimeout(() => {
       uploadDialog.value = false
-      fileInput.value.value = ''
     }, 800)
   } catch (err) {
     console.error('Error subiendo archivos:', err)
     uploading.value = false
     uploadDialog.value = false
-    fileInput.value.value = ''
     error.value = err.message || 'Error al subir los archivos'
   }
+}
+
+// Manejar errores del componente FileDropZone
+const handleDropZoneError = (errorMessage) => {
+  error.value = errorMessage
 }
 
 const confirmDelete = (file) => {
@@ -132,6 +128,22 @@ const formatDate = (dateString) => {
   })
 }
 
+// Computed para identificar el archivo más reciente
+const newestFile = computed(() => {
+  if (files.value.length === 0) return null
+  
+  return files.value.reduce((newest, current) => {
+    const newestDate = new Date(newest.modifiedAt || newest.uploadedAt)
+    const currentDate = new Date(current.modifiedAt || current.uploadedAt)
+    return currentDate > newestDate ? current : newest
+  })
+})
+
+// Verificar si un archivo es el más reciente
+const isNewestFile = (file) => {
+  return newestFile.value && file.id === newestFile.value.id
+}
+
 </script>
 
 <template>
@@ -158,17 +170,18 @@ const formatDate = (dateString) => {
     <v-window v-model="currentTab">
       <!-- Listas Excel Tab -->
       <v-window-item value="listas">
-        <div class="d-flex justify-end mb-4">
-          <v-btn 
-            color="primary" 
-            prepend-icon="mdi-upload"
-            @click="openFileUpload"
-            elevation="0"
-            :disabled="uploading || loading"
-          >
-            Subir Archivo
-          </v-btn>
-        </div>
+        <!-- Drag and Drop Zone -->
+        <FileDropZone
+          :accept="['xlsx', 'xls', 'csv']"
+          accept-label=".xlsx, .xls, .csv"
+          :multiple="true"
+          :disabled="uploading || loading"
+          title="Arrastra y suelta archivos Excel aquí"
+          button-text="Seleccionar Archivos"
+          class="mb-6"
+          @files-selected="handleFilesSelected"
+          @error="handleDropZoneError"
+        />
 
         <!-- Loading indicator -->
         <div v-if="loading" class="text-center pa-8">
@@ -228,16 +241,6 @@ const formatDate = (dateString) => {
       </v-window-item>
     </v-window>
 
-    <!-- Hidden file input -->
-    <input
-      ref="fileInput"
-      type="file"
-      multiple
-      accept=".xlsx,.xls,.csv"
-      style="display: none"
-      @change="handleFileSelect"
-    />
-
     <!-- Upload Dialog -->
     <v-dialog v-model="uploadDialog" max-width="400" persistent>
       <v-card>
@@ -265,7 +268,7 @@ const formatDate = (dateString) => {
         <v-card-text>
           ¿Estás seguro de que deseas eliminar el archivo 
           <strong>{{ fileToDelete?.name }}</strong>?  
-          Eliminar un archivo sincroniza con el archivo anterior.
+          Eliminar un archivo sincroniza con el archivo mas reciente.
         </v-card-text>
         <v-card-actions>
           <v-spacer />

@@ -2,77 +2,86 @@
 const props = defineProps({
   source: {
     type: Object,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
-const client = useSupabaseClient()
+const client = useSupabaseClient();
+const selectedSourceLog = ref(null);
+const sourceExecutionLogsDialog = ref(false);
 
 // Estados
-const logs = ref([])
-const loading = ref(false)
-const error = ref(null)
+const logs = ref([]);
+const loading = ref(false);
+const error = ref(null);
 
 // Cargar logs desde Supabase
 const loadLogs = async () => {
   try {
-    loading.value = true
-    error.value = null
+    loading.value = true;
+    error.value = null;
 
     const { data, error: fetchError } = await client
-      .from('provider_source_logs')
-      .select('id, started_at, finished_at, status, source_filename, error_message, friendly_message')
-      .eq('provider_source_id', props.source.id)
-      .order('started_at', { ascending: false })
+      .from("provider_source_logs")
+      .select(
+        "id, started_at, finished_at, status, source_filename, error_message, friendly_message"
+      )
+      .eq("provider_source_id", props.source.id)
+      .order("started_at", { ascending: false });
 
-    if (fetchError) throw fetchError
+    if (fetchError) throw fetchError;
 
-    logs.value = data || []
+    logs.value = data || [];
   } catch (err) {
-    console.error('Error cargando logs:', err)
-    error.value = err.message || 'Error al cargar los logs'
+    console.error("Error cargando logs:", err);
+    error.value = err.message || "Error al cargar los logs";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // Formatear fecha y hora
 const formatDateTime = (dateTimeString) => {
-  if (!dateTimeString) return '-'
-  const date = new Date(dateTimeString)
-  return date.toLocaleString('es-ES', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
+  if (!dateTimeString) return "-";
+  const date = new Date(dateTimeString);
+  return date.toLocaleString("es-ES", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+};
 
 // Obtener color según el estado
 const getStatusColor = (status) => {
   switch (status?.toLowerCase()) {
-    case 'success':
-    case 'completed':
-      return 'success'
-    case 'error':
-    case 'failed':
-      return 'error'
-    case 'running':
-    case 'in_progress':
-      return 'info'
-    case 'pending':
-      return 'warning'
+    case "success":
+    case "completed":
+      return "success";
+    case "error":
+    case "failed":
+      return "error";
+    case "running":
+    case "in_progress":
+      return "info";
+    case "pending":
+      return "warning";
     default:
-      return 'grey'
+      return "grey";
   }
-}
+};
+
+const clickSourceLog = (log) => {
+  selectedSourceLog.value = log;
+  sourceExecutionLogsDialog.value = true;
+};
 
 // Cargar logs al montar el componente
 onMounted(() => {
-  loadLogs()
-})
+  loadLogs();
+});
 </script>
 
 <template>
@@ -104,6 +113,13 @@ onMounted(() => {
       {{ error }}
     </v-alert>
 
+    <SourceExecutionLogsDialog
+      v-if="selectedSourceLog"
+      v-model="sourceExecutionLogsDialog"
+      :source="source"
+      :source-log="selectedSourceLog"
+    />
+
     <!-- Loading indicator -->
     <div v-if="loading" class="text-center pa-8">
       <v-progress-circular indeterminate color="primary" />
@@ -119,26 +135,36 @@ onMounted(() => {
         rounded="lg"
       >
         <template v-slot:prepend>
-          <v-avatar :color="getStatusColor(log.status)" variant="tonal" size="40">
-            <v-icon 
-              :icon="log.status === 'success' || log.status === 'completed' ? 'mdi-check-circle' : log.status === 'error' || log.status === 'failed' ? 'mdi-alert-circle' : 'mdi-information'" 
-              size="20" 
+          <v-avatar
+            :color="getStatusColor(log.status)"
+            variant="tonal"
+            size="40"
+          >
+            <v-icon
+              :icon="
+                log.status === 'success' || log.status === 'completed'
+                  ? 'mdi-check-circle'
+                  : log.status === 'error' || log.status === 'failed'
+                  ? 'mdi-alert-circle'
+                  : 'mdi-information'
+              "
+              size="20"
             />
           </v-avatar>
         </template>
 
         <v-list-item-title class="font-weight-medium mb-1">
-          <v-chip 
-            :color="getStatusColor(log.status)" 
-            size="small" 
+          <v-chip
+            :color="getStatusColor(log.status)"
+            size="small"
             variant="tonal"
             class="mr-2"
           >
-            {{ log.status || 'unknown' }}
+            {{ log.status || "unknown" }}
           </v-chip>
-          {{ log.source_filename || 'Sin nombre de archivo' }}
+          {{ log.source_filename || "Sin nombre de archivo" }}
         </v-list-item-title>
-        
+
         <v-list-item-subtitle class="text-caption mt-1">
           <div class="d-flex flex-column gap-1">
             <div>
@@ -153,11 +179,29 @@ onMounted(() => {
             <div v-if="log.error_message" class="text-error">
               <strong>Error:</strong> {{ log.error_message }}
             </div>
+            <div>
+              <NewestSourceExecutionLog :source-log="log" />
+            </div>
           </div>
         </v-list-item-subtitle>
+
+        <template v-slot:append>
+          <v-btn
+            @click="clickSourceLog(log)"
+            color="primary"
+            variant="tonal"
+            size="small"
+            prepend-icon="mdi-eye"
+          >
+            detalle
+          </v-btn>
+        </template>
       </v-list-item>
 
-      <div v-if="logs.length === 0 && !loading" class="text-center pa-8 text-grey">
+      <div
+        v-if="logs.length === 0 && !loading"
+        class="text-center pa-8 text-grey"
+      >
         No hay registros de actividad
       </div>
     </v-list>

@@ -44,7 +44,7 @@ onMounted(() => {
     <v-navigation-drawer
       v-model="drawer"
       permanent
-      :width="320"
+      :width="280"
       class="drawer-custom"
     >
       <!-- Header -->
