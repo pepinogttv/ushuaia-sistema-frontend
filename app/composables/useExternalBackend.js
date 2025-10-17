@@ -163,6 +163,46 @@ export function useExternalBackend() {
         method: "DELETE",
       }, true);
     };
+
+    const executeSource = async (sourceName) => {
+      if (!sourceName) {
+        throw new Error("sourceName es requerido");
+      }
+  
+      return await request(`/api/sources/${sourceName}/execute`, {
+        method: "POST",
+      }, true);
+    }
+
+    /**
+     * Cancela la ejecución de un source
+     * @param {string} sourceName - Nombre del source
+     * @returns {Promise<object>} - Estado del trabajo y información de cancelación
+     */
+    const cancelSourceExecution = async (sourceName) => {
+      if (!sourceName) {
+        throw new Error("sourceName es requerido");
+      }
+  
+      return await request(`/api/sources/${sourceName}/cancel-execution`, {
+        method: "POST",
+      }, true);
+    }
+
+    /**
+     * Elimina un provider source log
+     * @param {number|string} logId - ID del log a eliminar
+     * @returns {Promise<object>} - Confirmación de eliminación
+     */
+    const deleteProviderSourceLog = async (logId) => {
+      if (!logId) {
+        throw new Error("logId es requerido");
+      }
+  
+      return await request(`/api/sources/provider-source-logs/${logId}`, {
+        method: "DELETE",
+      }, true);
+    }
   
     return {
       // Método genérico
@@ -172,6 +212,9 @@ export function useExternalBackend() {
       sourceUploadFile,
       sourceListFiles,
       sourceDeleteFile,
+      executeSource,
+      cancelSourceExecution,
+      deleteProviderSourceLog,
   
       // Propiedades útiles
       baseUrl,

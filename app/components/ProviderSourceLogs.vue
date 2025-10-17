@@ -88,7 +88,7 @@ onMounted(() => {
   <div class="logs-viewer">
     <!-- Header con botón de recarga -->
     <div class="d-flex justify-space-between align-center mb-4">
-      <h3 class="text-h6">Historial de Actividad</h3>
+      <h3 class="text-h6">Historial de Sincronización</h3>
       <v-btn
         @click="loadLogs"
         :loading="loading"

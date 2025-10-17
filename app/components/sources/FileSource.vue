@@ -6,7 +6,7 @@ const props = defineProps({
   }
 })
 
-const { sourceUploadFile, sourceListFiles, sourceDeleteFile } = useExternalBackend()
+const { sourceUploadFile, sourceListFiles } = useExternalBackend()
 
 // Tabs
 const currentTab = ref('listas')
@@ -16,12 +16,11 @@ const files = ref([])
 const loading = ref(false)
 const error = ref(null)
 
+// Referencia al componente de último log
+const latestLogCard = ref(null)
 
 const uploadDialog = ref(false)
-const deleteDialog = ref(false)
-const fileToDelete = ref(null)
 const uploading = ref(false)
-const deleting = ref(false)
 
 // Cargar archivos al montar el componente
 const loadFiles = async () => {
@@ -66,6 +65,11 @@ const handleFilesSelected = async (selectedFiles) => {
     // Recargar la lista de archivos
     await loadFiles()
 
+    // Recargar el último log
+    if (latestLogCard.value) {
+      await latestLogCard.value.fetchLatestLog()
+    }
+
     uploading.value = false
     
     // Cerrar diálogo después de un momento
@@ -85,32 +89,6 @@ const handleDropZoneError = (errorMessage) => {
   error.value = errorMessage
 }
 
-const confirmDelete = (file) => {
-  fileToDelete.value = file
-  deleteDialog.value = true
-}
-
-const deleteFile = async () => {
-  if (!fileToDelete.value) return
-
-  deleting.value = true
-
-  try {
-    await sourceDeleteFile(props.source.name, fileToDelete.value.name)
-    
-    // Recargar la lista de archivos
-    await loadFiles()
-    
-    deleting.value = false
-    deleteDialog.value = false
-    fileToDelete.value = null
-  } catch (err) {
-    console.error('Error eliminando archivo:', err)
-    deleting.value = false
-    error.value = err.message || 'Error al eliminar el archivo'
-  }
-}
-
 const formatFileSize = (bytes) => {
   if (bytes === 0) return '0 Bytes'
   const k = 1024
@@ -127,27 +105,13 @@ const formatDate = (dateString) => {
     day: 'numeric' 
   })
 }
-
-// Computed para identificar el archivo más reciente
-const newestFile = computed(() => {
-  if (files.value.length === 0) return null
-  
-  return files.value.reduce((newest, current) => {
-    const newestDate = new Date(newest.modifiedAt || newest.uploadedAt)
-    const currentDate = new Date(current.modifiedAt || current.uploadedAt)
-    return currentDate > newestDate ? current : newest
-  })
-})
-
-// Verificar si un archivo es el más reciente
-const isNewestFile = (file) => {
-  return newestFile.value && file.id === newestFile.value.id
-}
-
 </script>
 
 <template>
   <div class="file-source-content">
+    <!-- Latest Log Card -->
+    <LatestSourceLogCard ref="latestLogCard" :source="source" />
+
     <!-- Error Alert -->
     <v-alert
       v-if="error"
@@ -163,7 +127,7 @@ const isNewestFile = (file) => {
     <!-- Tabs -->
     <v-tabs v-model="currentTab" bg-color="transparent" color="primary" class="mb-4">
       <v-tab value="listas">Listas Excel</v-tab>
-      <v-tab value="logs">Logs</v-tab>
+      <v-tab value="logs">Historial</v-tab>
     </v-tabs>
 
     <!-- Tab Content -->
@@ -211,21 +175,12 @@ const isNewestFile = (file) => {
             </v-list-item-subtitle>
 
             <template v-slot:append>
-              <div class="d-flex gap-1">
-                <v-btn
-                  icon="mdi-download"
-                  variant="text"
-                  size="small"
-                  color="primary"
-                />
-                <v-btn
-                  icon="mdi-delete"
-                  variant="text"
-                  size="small"
-                  color="error"
-                  @click="confirmDelete(file)"
-                />
-              </div>
+              <v-btn
+                icon="mdi-download"
+                variant="text"
+                size="small"
+                color="primary"
+              />
             </template>
           </v-list-item>
 
@@ -237,7 +192,7 @@ const isNewestFile = (file) => {
 
       <!-- Logs Tab -->
       <v-window-item value="logs">
-        <ProviderSourceLogs :source="source" />
+        <ProviderSourceLogs :source="source" v-if="currentTab === 'logs'"/> <!-- v-if para forzar que recargue -->
       </v-window-item>
     </v-window>
 
@@ -256,38 +211,6 @@ const isNewestFile = (file) => {
           />
           <v-icon v-else icon="mdi-check-circle" color="success" size="64" />
         </v-card-text>
-      </v-card>
-    </v-dialog>
-
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="500">
-      <v-card>
-        <v-card-title class="text-h6">
-          Confirmar eliminación
-        </v-card-title>
-        <v-card-text>
-          ¿Estás seguro de que deseas eliminar el archivo 
-          <strong>{{ fileToDelete?.name }}</strong>?  
-          Eliminar un archivo sincroniza con el archivo mas reciente.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn
-            variant="text"
-            @click="deleteDialog = false"
-            :disabled="deleting"
-          >
-            Cancelar
-          </v-btn>
-          <v-btn
-            color="error"
-            variant="flat"
-            @click="deleteFile"
-            :loading="deleting"
-          >
-            Eliminar
-          </v-btn>
-        </v-card-actions>
       </v-card>
     </v-dialog>
   </div>

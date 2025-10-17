@@ -2,20 +2,28 @@
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   source: {
     type: Object,
-    default: () => null
-  }
-})
+    default: () => null,
+  },
+});
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(["update:modelValue"]);
 
 const isOpen = computed({
   get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value)
-})
+  set: (value) => emit("update:modelValue", value),
+});
+
+const reloading = ref(false);
+const reload = () => {
+  reloading.value = true;
+  setTimeout(() => {
+    reloading.value = false;
+  }, 100);
+};
 </script>
 
 <template>
@@ -32,25 +40,26 @@ const isOpen = computed({
       <div class="pa-4 border-b">
         <div class="d-flex align-center justify-space-between">
           <h2 class="text-h5 font-weight-bold">
-            {{ source?.friendly_name || source?.name || 'Detalles de la Fuente' }}
+            {{
+              source?.friendly_name || source?.name || "Detalles de la Fuente"
+            }}
           </h2>
-          <v-btn
-            icon="mdi-close"
-            variant="text"
-            @click="isOpen = false"
-          />
+          <div>
+            <v-btn icon="mdi-reload" variant="text" @click="reload" />
+            <v-btn icon="mdi-close" variant="text" @click="isOpen = false" />
+          </div>
         </div>
       </div>
 
       <!-- Content -->
-      <div class="flex-grow-1 pa-6">
-        <SourcesFileSource 
-          v-if="source && source.type === 'file-source'" 
-          :source="source" 
+      <div class="flex-grow-1 pa-6" v-if="!reloading">
+        <SourcesFileSource
+          v-if="source && source.type === 'file-source'"
+          :source="source"
         />
-        <SourcesWebScraperSource 
-          v-else-if="source && source.type === 'web-scraper-source'" 
-          :source="source" 
+        <SourcesWebScraperSource
+          v-else-if="source && source.type === 'web-scraper-source'"
+          :source="source"
         />
         <v-alert v-else-if="source" type="warning" variant="tonal">
           No hay un componente específico para el tipo "{{ source.type }}"
@@ -72,4 +81,3 @@ const isOpen = computed({
   z-index: 9999;
 }
 </style>
-
