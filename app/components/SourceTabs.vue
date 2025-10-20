@@ -8,6 +8,9 @@ const props = defineProps({
 
 const { executeSource } = useExternalBackend();
 
+// Tabs
+const currentTab = ref("sincronizacion");
+
 // Estado de ejecución
 const executing = ref(false);
 const executionResult = ref(null);
@@ -68,34 +71,53 @@ const handleExecute = async () => {
       Sincronización iniciada exitosamente
     </v-alert>
 
-    <v-card variant="outlined">
-      <v-card-title class="text-h6">
-        <v-icon icon="mdi-play-circle" class="mr-2" color="primary" />
-        Sincronizar
-      </v-card-title>
-      <v-card-text>
-        <p class="mb-4 text-grey">
-          Comienza la sincronización para obtener y actualizar los datos desde
-          la web.
-        </p>
+    <!-- Tabs -->
+    <v-tabs
+      v-model="currentTab"
+      bg-color="transparent"
+      color="primary"
+      class="mb-4"
+    >
+      <v-tab value="sincronizacion">
+        <v-icon icon="mdi-sync" class="mr-2" />
+        Sincronización
+      </v-tab>
+      <v-tab value="historial">
+        <v-icon icon="mdi-history" class="mr-2" />
+        Historial
+      </v-tab>
+      <!-- <v-tab value="configuracion">
+        <v-icon icon="mdi-cog" class="mr-2" />
+        Configuración
+      </v-tab> -->
+    </v-tabs>
 
-        <v-btn
-          color="primary"
-          size="large"
-          prepend-icon="mdi-play"
-          :loading="executing"
-          :disabled="executing"
-          @click="handleExecute"
-          block
-        >
-          {{
-            executing
-              ? "Comenzando sincronización..."
-              : "Comenzar sincronización"
-          }}
-        </v-btn>
-      </v-card-text>
-    </v-card>
+    <!-- Tab Content -->
+    <v-window v-model="currentTab">
+      <!-- Sincronización Tab -->
+      <v-window-item value="sincronizacion">
+        <slot name="sincronizacion"> </slot>
+      </v-window-item>
+
+      <!-- Historial Tab -->
+      <v-window-item value="historial">
+        <ProviderSourceLogs :source="source" />
+      </v-window-item>
+
+      <!-- Configuración Tab -->
+      <!-- <v-window-item value="configuracion">
+        <v-card variant="outlined">
+          <v-card-title class="text-h6">
+            <v-icon icon="mdi-cog" class="mr-2" color="primary" />
+            Configuración
+          </v-card-title>
+          <v-card-text>
+            <p class="text-grey">Configuración del Web Scraper Source.</p>
+            Aquí se puede agregar el contenido de configuración específico
+          </v-card-text>
+        </v-card>
+      </v-window-item> -->
+    </v-window>
   </div>
 </template>
 

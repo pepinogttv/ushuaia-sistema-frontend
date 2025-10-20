@@ -129,7 +129,7 @@ defineExpose({
             </v-avatar>
             <div>
               <div class="text-h6 font-weight-bold">{{ getStatusMessage(latestLog.status) }} ({{ latestLog.id }})</div>
-              <div class="text-caption opacity-80">Última sincronización</div>
+              <div class="text-caption opacity-80">{{ latestLog.friendly_message }}</div>
             </div>
           </div>
           <v-btn

@@ -1,10 +1,21 @@
 <script setup>
 const client = useSupabaseClient()
+const user = useSupabaseUser()
 
 const providers = ref([])
 const pending = ref(true)
 const error = ref(null)
 const drawer = ref(true)
+
+const signOut = async () => {
+  const { error } = await client.auth.signOut()
+  if (error) {
+    console.log(error)
+  } else {
+    navigateTo('/login')
+  }
+}
+
 
 const fetchProviders = async () => {
   try {
@@ -98,6 +109,29 @@ onMounted(() => {
           </v-card>
         </div>
       </div>
+
+      <!-- User Footer -->
+      <div class="drawer-footer">
+        <div v-if="user" class="user-info">
+          <div class="user-avatar">
+            <v-icon size="28" color="white">mdi-account-circle</v-icon>
+          </div>
+          <div class="user-details">
+            <p class="user-name">{{ user.user_metadata?.name || 'Usuario' }}</p>
+            <p class="user-email">{{ user.email }}</p>
+          </div>
+        </div>
+        <v-btn
+          @click="signOut"
+          variant="outlined"
+          color="error"
+          size="small"
+          class="logout-btn"
+          prepend-icon="mdi-logout"
+        >
+          Cerrar Sesión
+        </v-btn>
+      </div>
     </v-navigation-drawer>
 
     <!-- Main Content -->
@@ -143,6 +177,7 @@ onMounted(() => {
 
 .providers-container {
   padding: 20px 16px;
+  padding-bottom: 180px; /* Espacio para el footer fijo */
 }
 
 .empty-state {
@@ -256,6 +291,79 @@ onMounted(() => {
 
 .v-navigation-drawer :deep(.v-navigation-drawer__content)::-webkit-scrollbar-thumb:hover {
   background: rgba(102, 126, 234, 0.5);
+}
+
+/* User Footer */
+.drawer-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+  padding: 16px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #f8f9fa 100%);
+  border-radius: 12px;
+}
+
+.user-avatar {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.user-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0 0 2px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-email {
+  font-size: 12px;
+  color: #7f8c8d;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout-btn {
+  width: 100%;
+  text-transform: none;
+  font-weight: 600;
+  border-width: 2px !important;
+  transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.2);
 }
 </style>
 
