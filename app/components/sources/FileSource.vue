@@ -121,8 +121,8 @@ const formatDate = (dateString) => {
     <!-- Drag and Drop Zone -->
     <FileDropZone
       :accept="['xlsx', 'xls', 'csv']"
+      :multiple="false"
       accept-label=".xlsx, .xls, .csv"
-      :multiple="true"
       :disabled="uploading || loading"
       title="Arrastra y suelta archivos Excel aquí"
       button-text="Seleccionar Archivos"
