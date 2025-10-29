@@ -11,13 +11,15 @@ const supabase = useSupabaseClient()
 
 // Último log
 const latestLog = ref(null)
+const logCount = ref(0)
 const undoing = ref(false)
 const undoDialog = ref(false)
 const error = ref(null)
-
-// Buscar el último log
+ 
+// Buscar el último log y contar todos los logs
 const fetchLatestLog = async () => {
   try {
+    // Obtener el último log
     const { data, error: fetchError } = await supabase
       .from('provider_source_logs')
       .select('*')
@@ -30,6 +32,20 @@ const fetchLatestLog = async () => {
       console.error('Error fetching latest log:', fetchError)
     } else {
       latestLog.value = data
+      
+      // Si hay un log, contar todos los logs de este provider_source_id
+      if (data) {
+        const { count, error: countError } = await supabase
+          .from('provider_source_logs')
+          .select('*', { count: 'exact', head: true })
+          .eq('provider_source_id', props.source.id)
+        
+        if (countError) {
+          console.error('Error counting logs:', countError)
+        } else {
+          logCount.value = count || 0
+        }
+      }
     }
   } catch (err) {
     console.error('Error fetching latest log:', err)
@@ -128,7 +144,7 @@ defineExpose({
               <v-icon :icon="getStatusIcon(latestLog.status)" size="28" />
             </v-avatar>
             <div>
-              <div class="text-h6 font-weight-bold">{{ getStatusMessage(latestLog.status) }} ({{ latestLog.id }})</div>
+              <div class="text-h6 font-weight-bold">{{ getStatusMessage(latestLog.status) }} (#{{ logCount }})</div>
               <div class="text-caption opacity-80">{{ latestLog.friendly_message }}</div>
             </div>
           </div>
