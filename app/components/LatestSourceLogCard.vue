@@ -2,114 +2,119 @@
 const props = defineProps({
   source: {
     type: Object,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
-const { deleteProviderSourceLog } = useExternalBackend()
-const supabase = useSupabaseClient()
+const { deleteProviderSourceLog } = useExternalBackend();
+const supabase = useSupabaseClient();
 
 // Último log
-const latestLog = ref(null)
-const logCount = ref(0)
-const undoing = ref(false)
-const undoDialog = ref(false)
-const error = ref(null)
- 
+const latestLog = ref(null);
+const logCount = ref(0);
+const undoing = ref(false);
+const undoDialog = ref(false);
+const error = ref(null);
+
 // Buscar el último log y contar todos los logs
 const fetchLatestLog = async () => {
   try {
     // Obtener el último log
     const { data, error: fetchError } = await supabase
-      .from('provider_source_logs')
-      .select('*')
-      .eq('provider_source_id', props.source.id)
-      .order('started_at', { ascending: false })
+      .from("provider_source_logs")
+      .select("*")
+      .eq("provider_source_id", props.source.id)
+      .order("started_at", { ascending: false })
       .limit(1)
-      .maybeSingle()
-    
+      .maybeSingle();
+
     if (fetchError) {
-      console.error('Error fetching latest log:', fetchError)
+      console.error("Error fetching latest log:", fetchError);
     } else {
-      latestLog.value = data
-      
+      latestLog.value = data;
+
       // Si hay un log, contar todos los logs de este provider_source_id
       if (data) {
         const { count, error: countError } = await supabase
-          .from('provider_source_logs')
-          .select('*', { count: 'exact', head: true })
-          .eq('provider_source_id', props.source.id)
-        
+          .from("provider_source_logs")
+          .select("*", { count: "exact", head: true })
+          .eq("provider_source_id", props.source.id);
+
         if (countError) {
-          console.error('Error counting logs:', countError)
+          console.error("Error counting logs:", countError);
         } else {
-          logCount.value = count || 0
+          logCount.value = count || 0;
         }
       }
     }
   } catch (err) {
-    console.error('Error fetching latest log:', err)
+    console.error("Error fetching latest log:", err);
   }
-}
+};
 
 // Abrir diálogo de confirmación
 const openUndoDialog = () => {
-  undoDialog.value = true
-}
+  undoDialog.value = true;
+};
 
 // Deshacer sincronización
 const handleUndoExecution = async () => {
   try {
-    undoing.value = true
-    error.value = null
-    undoDialog.value = false
-    
-    await deleteProviderSourceLog(latestLog.value.id)
-    
+    undoing.value = true;
+    error.value = null;
+    undoDialog.value = false;
+
+    await deleteProviderSourceLog(latestLog.value.id);
+
     // Actualizar el último log
-    await fetchLatestLog()
+    await fetchLatestLog();
   } catch (err) {
-    console.error('Error deshaciendo sincronización:', err)
-    error.value = err.message || 'Error al deshacer la sincronización'
+    console.error("Error deshaciendo sincronización:", err);
+    if (err.message.includes("Only the most recent log")) {
+      error.value =
+        "Error: Hay alguna sincronizacion mas reciente para este proveedor. No se puede deshacer.";
+    } else {
+      error.value = err.message || "Error al deshacer la sincronización";
+    }
   } finally {
-    undoing.value = false
+    undoing.value = false;
   }
-}
+};
 
 // Obtener el mensaje según el estado
 const getStatusMessage = (status) => {
   const messages = {
-    pending: 'Sincronización en curso',
-    success: 'Sincronización Exitosa',
-    error: 'Fallo la sincronización'
-  }
-  return messages[status] || 'Estado desconocido'
-}
+    pending: "Sincronización en curso",
+    success: "Sincronización Exitosa",
+    error: "Fallo la sincronización",
+  };
+  return messages[status] || "Estado desconocido";
+};
 
 // Obtener el icono según el estado
 const getStatusIcon = (status) => {
   const icons = {
-    pending: 'mdi-clock-outline',
-    success: 'mdi-check-circle-outline',
-    error: 'mdi-alert-circle-outline'
-  }
-  return icons[status] || 'mdi-information-outline'
-}
+    pending: "mdi-clock-outline",
+    success: "mdi-check-circle-outline",
+    error: "mdi-alert-circle-outline",
+  };
+  return icons[status] || "mdi-information-outline";
+};
 
 // Verificar si el source es de tipo file-source
 const isFileSource = computed(() => {
-  return props.source.type === 'file-source'
-})
+  return props.source.type === "file-source";
+});
 
 // Buscar el último log al montar el componente
 onMounted(() => {
-  fetchLatestLog()
-})
+  fetchLatestLog();
+});
 
 // Exponer la función para que los componentes padres puedan recargar el log
 defineExpose({
-  fetchLatestLog
-})
+  fetchLatestLog,
+});
 </script>
 
 <template>
@@ -129,23 +134,39 @@ defineExpose({
     <!-- Latest Log Card -->
     <v-card
       v-if="latestLog"
-      :color="latestLog.status === 'success' ? 'success' : latestLog.status === 'error' ? 'error' : 'info'"
+      :color="
+        latestLog.status === 'success'
+          ? 'success'
+          : latestLog.status === 'error'
+          ? 'error'
+          : 'info'
+      "
       variant="tonal"
       class="mb-4 latest-log-card"
     >
       <v-card-text>
         <div class="d-flex align-center justify-space-between mb-3">
           <div class="d-flex align-center">
-            <v-avatar 
-              :color="latestLog.status === 'success' ? 'success' : latestLog.status === 'error' ? 'error' : 'info'"
+            <v-avatar
+              :color="
+                latestLog.status === 'success'
+                  ? 'success'
+                  : latestLog.status === 'error'
+                  ? 'error'
+                  : 'info'
+              "
               size="48"
               class="mr-3"
             >
               <v-icon :icon="getStatusIcon(latestLog.status)" size="28" />
             </v-avatar>
             <div>
-              <div class="text-h6 font-weight-bold">{{ getStatusMessage(latestLog.status) }} (#{{ logCount }})</div>
-              <div class="text-caption opacity-80">{{ latestLog.friendly_message }}</div>
+              <div class="text-h6 font-weight-bold">
+                {{ getStatusMessage(latestLog.status) }} (#{{ logCount }})
+              </div>
+              <div class="text-caption opacity-80">
+                {{ latestLog.friendly_message }}
+              </div>
             </div>
           </div>
           <v-btn
@@ -182,10 +203,22 @@ defineExpose({
               <span class="text-body-2 font-weight-medium">Inicio</span>
             </div>
             <div class="text-h6 font-weight-bold">
-              {{ new Date(latestLog.started_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}
+              {{
+                new Date(latestLog.started_at).toLocaleTimeString("es-AR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })
+              }}
             </div>
             <div class="text-caption opacity-70">
-              {{ new Date(latestLog.started_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) }}
+              {{
+                new Date(latestLog.started_at).toLocaleDateString("es-AR", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })
+              }}
             </div>
           </div>
 
@@ -195,10 +228,22 @@ defineExpose({
               <span class="text-body-2 font-weight-medium">Fin</span>
             </div>
             <div class="text-h6 font-weight-bold">
-              {{ new Date(latestLog.finished_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}
+              {{
+                new Date(latestLog.finished_at).toLocaleTimeString("es-AR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })
+              }}
             </div>
             <div class="text-caption opacity-70">
-              {{ new Date(latestLog.finished_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) }}
+              {{
+                new Date(latestLog.finished_at).toLocaleDateString("es-AR", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })
+              }}
             </div>
           </div>
 
@@ -207,11 +252,14 @@ defineExpose({
               <v-icon icon="mdi-clock-end" size="20" class="mr-2" />
               <span class="text-body-2 font-weight-medium">Fin</span>
             </div>
-            <div class="text-h6 font-weight-bold opacity-50">
-              En proceso...
-            </div>
+            <div class="text-h6 font-weight-bold opacity-50">En proceso...</div>
             <div class="text-caption opacity-70">
-              <v-progress-circular indeterminate size="16" width="2" class="mr-1" />
+              <v-progress-circular
+                indeterminate
+                size="16"
+                width="2"
+                class="mr-1"
+              />
               Ejecutando
             </div>
           </div>
@@ -222,10 +270,25 @@ defineExpose({
               <span class="text-body-2 font-weight-medium">Duración</span>
             </div>
             <div class="text-h6 font-weight-bold">
-              {{ Math.round((new Date(latestLog.finished_at) - new Date(latestLog.started_at)) / 1000) }}s
+              {{
+                Math.round(
+                  (new Date(latestLog.finished_at) -
+                    new Date(latestLog.started_at)) /
+                    1000
+                )
+              }}s
             </div>
             <div class="text-caption opacity-70">
-              {{ (Math.round((new Date(latestLog.finished_at) - new Date(latestLog.started_at)) / 100) / 10).toFixed(1) }} segundos
+              {{
+                (
+                  Math.round(
+                    (new Date(latestLog.finished_at) -
+                      new Date(latestLog.started_at)) /
+                      100
+                  ) / 10
+                ).toFixed(1)
+              }}
+              segundos
             </div>
           </div>
         </div>
@@ -240,9 +303,10 @@ defineExpose({
         </v-card-title>
         <v-card-text>
           <p class="mb-2">
-            ¿Estás seguro que quieres deshacer la sincronización? Esto implica que todos los cambios hechos por la misma se revertirán.
+            ¿Estás seguro que quieres deshacer la sincronización? Esto implica
+            que todos los cambios hechos por la misma se revertirán.
           </p>
-          
+
           <!-- Advertencia adicional para file-source -->
           <v-alert
             v-if="isFileSource && latestLog?.source_filename"
@@ -252,25 +316,17 @@ defineExpose({
             class="mt-3"
           >
             <div class="text-body-2">
-              <strong>Se eliminará el archivo:</strong><br>
+              <strong>Se eliminará el archivo:</strong><br />
               {{ latestLog.source_filename }}
             </div>
           </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn
-            color="grey"
-            variant="text"
-            @click="undoDialog = false"
-          >
+          <v-btn color="grey" variant="text" @click="undoDialog = false">
             Cancelar
           </v-btn>
-          <v-btn
-            color="warning"
-            variant="flat"
-            @click="handleUndoExecution"
-          >
+          <v-btn color="warning" variant="flat" @click="handleUndoExecution">
             Confirmar
           </v-btn>
         </v-card-actions>
@@ -308,4 +364,3 @@ defineExpose({
   opacity: 0.5;
 }
 </style>
-
