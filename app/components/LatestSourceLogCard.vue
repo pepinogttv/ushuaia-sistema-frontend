@@ -9,12 +9,17 @@ const props = defineProps({
 const { deleteProviderSourceLog } = useExternalBackend();
 const supabase = useSupabaseClient();
 
+const sourceExecutionLogsDialog = ref(false);
+
 // Último log
 const latestLog = ref(null);
 const logCount = ref(0);
 const undoing = ref(false);
 const undoDialog = ref(false);
 const error = ref(null);
+
+// Canal de realtime
+let realtimeChannel = null;
 
 // Buscar el último log y contar todos los logs
 const fetchLatestLog = async () => {
@@ -50,6 +55,32 @@ const fetchLatestLog = async () => {
   } catch (err) {
     console.error("Error fetching latest log:", err);
   }
+};
+
+// Configurar suscripción de realtime
+const setupRealtimeSubscription = () => {
+  realtimeChannel = supabase
+    .channel(`provider-source-logs-${props.source.id}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "provider_source_logs",
+        filter: `provider_source_id=eq.${props.source.id}`,
+      },
+      (payload) => {
+        console.log("Realtime update received:", payload);
+        fetchLatestLog();
+      }
+    )
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        console.log("Realtime subscription active");
+      } else if (status === "CHANNEL_ERROR") {
+        console.error("Realtime subscription error");
+      }
+    });
 };
 
 // Abrir diálogo de confirmación
@@ -109,6 +140,15 @@ const isFileSource = computed(() => {
 // Buscar el último log al montar el componente
 onMounted(() => {
   fetchLatestLog();
+  setupRealtimeSubscription();
+});
+
+// Limpiar suscripción al desmontar
+onUnmounted(() => {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
 });
 
 // Exponer la función para que los componentes padres puedan recargar el log
@@ -120,6 +160,13 @@ defineExpose({
 <template>
   <div>
     <!-- Error Alert -->
+    <SourceExecutionLogsDialog
+      v-if="latestLog && sourceExecutionLogsDialog"
+      v-model="sourceExecutionLogsDialog"
+      :source="source"
+      :source-log="latestLog"
+    />
+
     <v-alert
       v-if="error"
       type="error"
@@ -169,17 +216,28 @@ defineExpose({
               </div>
             </div>
           </div>
-          <v-btn
-            color="warning"
-            variant="flat"
-            size="small"
-            :loading="undoing"
-            :disabled="undoing || latestLog.status === 'pending'"
-            @click="openUndoDialog"
-            prepend-icon="mdi-undo"
-          >
-            Deshacer
-          </v-btn>
+          <div>
+            <v-btn
+              color="warning"
+              variant="flat"
+              size="small"
+              :loading="undoing"
+              :disabled="undoing || latestLog.status === 'pending'"
+              @click="openUndoDialog"
+              prepend-icon="mdi-undo"
+              class="mr-2"
+            >
+              Deshacer
+            </v-btn>
+            <v-btn
+              size="x-small"
+              color="primary"
+              variant="flat"
+              @click="sourceExecutionLogsDialog = true"
+              icon="mdi-eye"
+            >
+            </v-btn>
+          </div>
         </div>
 
         <v-divider class="mb-3" />

@@ -37,7 +37,7 @@ const loadNewestLog = async () => {
       .from("source_execution_logs")
       .select("id, message, timestamp")
       .eq("provider_source_log_id", props.sourceLog.id)
-      .order("id", { ascending: false })
+      .order("sequence", { ascending: false })
       .limit(1)
       .single();
 
@@ -70,12 +70,7 @@ watch(
   <!-- Mostrar "Procesando..." para pending -->
   <div v-if="sourceLog?.status === 'pending'" class="pending-indicator">
     <div class="text-caption text-medium-emphasis d-flex align-center gap-2">
-      <v-progress-circular
-        indeterminate
-        size="16"
-        width="2"
-        color="primary"
-      />
+      <v-progress-circular indeterminate size="16" width="2" color="primary" />
       <span>Procesando...</span>
     </div>
   </div>

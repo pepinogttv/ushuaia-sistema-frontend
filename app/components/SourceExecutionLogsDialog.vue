@@ -26,32 +26,76 @@ const page = ref(1);
 const pageSize = 100;
 const totalCount = ref(0);
 
+// Estado para el dialog de detalles
+const detailsDialog = ref(false);
+const selectedLog = ref(null);
+
+// Función para abrir el dialog de detalles
+const openDetailsDialog = (log) => {
+  if (log.metadata) {
+    selectedLog.value = log;
+    detailsDialog.value = true;
+  }
+};
+
+// Función para verificar si un log tiene metadata
+const hasMetadata = (log) => {
+  return log.metadata && Object.keys(log.metadata).length > 0;
+};
+
 const { data, status, error, refresh, clear } = useAsyncData(
   async () => {
     const from = (page.value - 1) * pageSize;
     const to = from + pageSize - 1;
-    
+
     // Get total count
     const { count } = await supabase
       .from("source_execution_logs")
-      .select("*", { count: 'exact', head: true })
+      .select("*", { count: "exact", head: true })
       .eq("provider_source_log_id", props.sourceLog.id);
-    
+
     totalCount.value = count || 0;
-    
+
     // Get paginated data
     const { data, error } = await supabase
       .from("source_execution_logs")
       .select("*")
       .eq("provider_source_log_id", props.sourceLog.id)
-      .order("id", { ascending: false })
+      .order("sequence", { ascending: false })
       .range(from, to);
-    
+
     if (error) throw error;
     return data;
   },
   { server: false, watch: [() => props.sourceLog?.id, page] }
 );
+
+// let realtimeChannel = null;
+
+// const setupRealtimeSubscription = () => {
+//   realtimeChannel = supabase
+//     .channel(`source-execution-logs-${props.sourceLog.id}`)
+//     .on(
+//       "postgres_changes",
+//       {
+//         event: "*",
+//         schema: "public",
+//         table: "source_execution_logs",
+//         filter: `provider_source_log_id=eq.${props.sourceLog.id}`,
+//       },
+//       (payload) => {
+//         console.log("Realtime update received:", payload);
+//         refresh();
+//       }
+//     )
+//     .subscribe((status) => {
+//       if (status === "SUBSCRIBED") {
+//         console.log("Realtime subscription active");
+//       } else if (status === "CHANNEL_ERROR") {
+//         console.error("Realtime subscription error");
+//       }
+//     });
+// };
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize));
 const hasNextPage = computed(() => page.value < totalPages.value);
@@ -70,77 +114,160 @@ const goToPrevPage = () => {
 };
 
 // Reset page when dialog opens or source log changes
-watch(() => props.sourceLog?.id, () => {
-  page.value = 1;
-});
+watch(
+  () => props.sourceLog?.id,
+  () => {
+    page.value = 1;
+  }
+);
+
+// onMounted(() => {
+//   if (props.sourceLog?.status === "pending") {
+//     setupRealtimeSubscription();
+//   }
+// });
+
+// onMounted(() => {
+//   if (props.sourceLog?.status === "pending") {
+//     setupRealtimeSubscription();
+//   }
+// });
+
+// onUnmounted(() => {
+//   if (realtimeChannel) {
+//     realtimeChannel.unsubscribe();
+//   }
+// });
 </script>
 
 <template>
+  <!-- Dialog de detalles -->
+  <ExecutionLogsDetailsDialog
+    v-if="selectedLog"
+    v-model="detailsDialog"
+    :source-execution-log="selectedLog"
+  />
+
   <v-dialog v-model="isOpen" max-width="900">
-    <v-card class="d-flex flex-column" style="height: 80vh;">
-      <v-card-title class="d-flex justify-space-between align-center flex-shrink-0">
+    <v-card class="d-flex flex-column" style="height: 80vh">
+      <v-card-title
+        class="d-flex justify-space-between align-center flex-shrink-0"
+      >
         <span>Logs de Ejecución</span>
         <v-btn icon="mdi-close" variant="text" @click="isOpen = false" />
       </v-card-title>
-      
-      <v-card-text class="flex-grow-1 overflow-y-auto" style="padding-bottom: 80px;">
+
+      <v-card-text
+        class="flex-grow-1 overflow-y-auto"
+        style="padding-bottom: 80px"
+      >
         <div v-if="status === 'pending'" class="text-center pa-4">
           <v-progress-circular indeterminate color="primary" />
         </div>
-        
+
         <v-alert v-else-if="error" type="error" variant="tonal">
           {{ error }}
         </v-alert>
-        
-        <div v-else-if="!data || data.length === 0" class="text-center pa-4 text-grey">
+
+        <div
+          v-else-if="!data || data.length === 0"
+          class="text-center pa-4 text-grey"
+        >
           No hay logs de ejecución
         </div>
-        
+
         <v-timeline v-else density="compact" side="end">
           <v-timeline-item
             v-for="log in data"
             :key="log.id"
-            :dot-color="log.level === 'error' ? 'error' : log.level === 'warn' ? 'warning' : 'info'"
+            :dot-color="
+              log.level === 'error'
+                ? 'error'
+                : log.level === 'warn'
+                ? 'warning'
+                : 'info'
+            "
             size="small"
           >
-            <div>
+            <div
+              :class="{ 'log-item-clickable': hasMetadata(log) }"
+              @click="openDetailsDialog(log)"
+            >
               <div class="d-flex align-center gap-2 mb-1">
-                <v-chip :color="log.level === 'error' ? 'error' : log.level === 'warn' ? 'orange' : 'info'" 
-                class="mr-2"
-                        size="x-small">
-                  {{ log.level === 'error' ? 'Error' : log.level === 'warn' ? 'Advertencia' : 'Info' }}
+                <v-chip
+                  :color="
+                    log.level === 'error'
+                      ? 'error'
+                      : log.level === 'warn'
+                      ? 'orange'
+                      : 'info'
+                  "
+                  class="mr-2"
+                  size="x-small"
+                >
+                  {{
+                    log.level === "error"
+                      ? "Error"
+                      : log.level === "warn"
+                      ? "Advertencia"
+                      : "Info"
+                  }}
                 </v-chip>
-                <v-chip color="grey-lighten-1" 
-                        size="x-small"
-                        variant="outlined">
-                  {{ new Date(log.timestamp).toLocaleString('es-ES', { 
-                    day: '2-digit', 
-                    month: '2-digit', 
-                    year: 'numeric',
-                    hour: '2-digit', 
-                    minute: '2-digit', 
-                    second: '2-digit',
-                    hour12: false
-                  }) }}
+                <v-chip
+                  color="grey-lighten-1"
+                  size="x-small"
+                  variant="outlined"
+                  class="mr-2"
+                >
+                  {{
+                    new Date(log.timestamp).toLocaleString("es-ES", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                      hour12: false,
+                    })
+                  }}
+                </v-chip>
+                <v-chip
+                  v-if="hasMetadata(log)"
+                  color="primary"
+                  size="x-small"
+                  variant="outlined"
+                >
+                  <v-icon size="x-small" start>mdi-information</v-icon>
+                  Ver detalles
                 </v-chip>
               </div>
-              <div class="text-body-2 mb-2">{{ log.message }}</div>
-              
+              <div class="text-body-2 mb-2">
+                ({{ log.sequence }}) - {{ log.message }}
+              </div>
+
               <!-- Mostrar fila si existe en metadata -->
-              <div v-if="log.metadata?.row && Array.isArray(log.metadata.row)" 
-                   class="mt-2">
+              <div
+                v-if="log.metadata?.row && Array.isArray(log.metadata.row)"
+                class="mt-2"
+              >
                 <div class="text-caption text-grey-darken-1 mb-1">Fila:</div>
                 <table class="row-table">
                   <thead>
                     <tr>
-                      <th v-for="(value, index) in log.metadata.row" :key="index">
+                      <th
+                        v-for="(value, index) in log.metadata.row"
+                        :key="index"
+                      >
                         {{ index }}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td v-for="(value, index) in log.metadata.row" :key="index">
+                      <td
+                        v-for="(value, index) in log.metadata.row"
+                        :key="index"
+                      >
                         {{ value }}
                       </td>
                     </tr>
@@ -151,16 +278,17 @@ watch(() => props.sourceLog?.id, () => {
           </v-timeline-item>
         </v-timeline>
       </v-card-text>
-      
+
       <v-divider v-if="data && data.length > 0" />
-      
-      <v-card-actions 
-        v-if="data && data.length > 0" 
-        class="justify-space-between flex-shrink-0 bg-white" 
-        style="position: sticky; bottom: 0; z-index: 10;"
+
+      <v-card-actions
+        v-if="data && data.length > 0"
+        class="justify-space-between flex-shrink-0 bg-white"
+        style="position: sticky; bottom: 0; z-index: 10"
       >
         <div class="text-caption text-grey">
-          Mostrando {{ (page - 1) * pageSize + 1 }} - {{ Math.min(page * pageSize, totalCount) }} de {{ totalCount }} logs
+          Mostrando {{ (page - 1) * pageSize + 1 }} -
+          {{ Math.min(page * pageSize, totalCount) }} de {{ totalCount }} logs
         </div>
         <div class="d-flex align-center gap-2">
           <v-btn
@@ -170,9 +298,7 @@ watch(() => props.sourceLog?.id, () => {
             variant="text"
             @click="goToPrevPage"
           />
-          <div class="text-caption">
-            Página {{ page }} de {{ totalPages }}
-          </div>
+          <div class="text-caption">Página {{ page }} de {{ totalPages }}</div>
           <v-btn
             :disabled="!hasNextPage"
             icon="mdi-chevron-right"
@@ -187,6 +313,23 @@ watch(() => props.sourceLog?.id, () => {
 </template>
 
 <style scoped>
+.log-item-clickable {
+  cursor: pointer;
+  padding: 8px;
+  margin: -8px;
+  border-radius: 8px;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.log-item-clickable:hover {
+  background-color: rgba(25, 118, 210, 0.08);
+  transform: translateX(4px);
+}
+
+.log-item-clickable:active {
+  transform: translateX(2px);
+}
+
 .row-table {
   width: 100%;
   border-collapse: collapse;
