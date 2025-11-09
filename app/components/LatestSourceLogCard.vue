@@ -213,6 +213,9 @@ defineExpose({
               </div>
               <div class="text-caption opacity-80">
                 {{ latestLog.friendly_message }}
+                <div v-if="latestLog.error_message">
+                  ({{ latestLog.error_message }})
+                </div>
               </div>
             </div>
           </div>
