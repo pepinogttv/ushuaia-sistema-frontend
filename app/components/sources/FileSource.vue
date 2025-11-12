@@ -6,7 +6,8 @@ const props = defineProps({
   },
 });
 
-const { sourceUploadFile, sourceListFiles } = useExternalBackend();
+const { sourceUploadFile, sourceListFiles, sourceDeleteFile } =
+  useExternalBackend();
 
 // Archivos (se cargarán desde el backend)
 const files = ref([]);
@@ -40,6 +41,16 @@ const loadFiles = async () => {
     error.value = err.message || "Error al cargar los archivos";
   } finally {
     loading.value = false;
+  }
+};
+
+const deleteFile = async (filename) => {
+  try {
+    await sourceDeleteFile(props.source.name, filename);
+    await loadFiles();
+  } catch (err) {
+    console.error("Error eliminando archivo:", err);
+    error.value = err.message || "Error al eliminar el archivo";
   }
 };
 
@@ -159,11 +170,18 @@ const formatDate = (dateString) => {
         </v-list-item-subtitle>
 
         <template v-slot:append>
-          <v-btn
+          <!-- <v-btn
             icon="mdi-download"
             variant="text"
             size="small"
             color="primary"
+          /> -->
+          <v-btn
+            icon="mdi-delete"
+            variant="text"
+            size="small"
+            color="error"
+            @click="deleteFile(file.id)"
           />
         </template>
       </v-list-item>
