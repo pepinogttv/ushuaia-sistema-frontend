@@ -1,52 +1,62 @@
 <script setup>
-const client = useSupabaseClient()
-const user = useSupabaseUser()
+const client = useSupabaseClient();
+const user = useSupabaseUser();
 
-const providers = ref([])
-const pending = ref(true)
-const error = ref(null)
-const drawer = ref(true)
+const providers = ref([]);
+const pending = ref(true);
+const error = ref(null);
+const drawer = ref(true);
+const searchQuery = ref("");
+
+const filteredProviders = computed(() => {
+  if (!searchQuery.value.trim()) {
+    return providers.value;
+  }
+  const query = searchQuery.value.toLowerCase().trim();
+  return providers.value.filter((provider) =>
+    provider.name.toLowerCase().includes(query)
+  );
+});
 
 const signOut = async () => {
-  const { error } = await client.auth.signOut()
+  const { error } = await client.auth.signOut();
   if (error) {
-    console.log(error)
+    console.log(error);
   } else {
-    navigateTo('/login')
+    navigateTo("/login");
   }
-}
-
+};
 
 const fetchProviders = async () => {
   try {
-    pending.value = true
-    error.value = null
-    
+    pending.value = true;
+    error.value = null;
+
     const { data, error: fetchError } = await client
       .from("providers")
       .select("id, name")
-      .order("name", { ascending: true })
-    
+      .order("name", { ascending: true });
+
     if (fetchError) {
-      throw fetchError
+      throw fetchError;
     }
-    
-    providers.value = data || []
+
+    providers.value = data || [];
   } catch (err) {
-    error.value = err
-    providers.value = []
+    error.value = err;
+    providers.value = [];
   } finally {
-    pending.value = false
+    pending.value = false;
   }
-}
+};
 
 const handleProviderClick = (provider) => {
-  navigateTo(`/providers/${provider.name}?id=${provider.id}`)
-}
+  navigateTo(`/providers/${provider.name}?id=${provider.id}`);
+};
 
 onMounted(() => {
-  fetchProviders()
-})
+  fetchProviders();
+});
 </script>
 
 <template>
@@ -66,10 +76,30 @@ onMounted(() => {
         </div>
       </div>
 
+      <!-- Search Bar -->
+      <div class="search-container">
+        <v-text-field
+          v-model="searchQuery"
+          placeholder="Buscar proveedor..."
+          prepend-inner-icon="mdi-magnify"
+          variant="solo"
+          density="comfortable"
+          hide-details
+          clearable
+          class="search-input"
+          @click:clear="searchQuery = ''"
+        />
+      </div>
+
       <div class="providers-container">
         <!-- Loading -->
         <div v-if="pending" class="text-center pa-8">
-          <v-progress-circular indeterminate color="primary" size="48" width="4" />
+          <v-progress-circular
+            indeterminate
+            color="primary"
+            size="48"
+            width="4"
+          />
           <p class="text-grey-darken-1 mt-4">Cargando...</p>
         </div>
 
@@ -81,14 +111,25 @@ onMounted(() => {
 
         <!-- Empty -->
         <div v-else-if="providers.length === 0" class="empty-state">
-          <v-icon size="64" color="grey-lighten-1">mdi-package-variant-closed</v-icon>
+          <v-icon size="64" color="grey-lighten-1"
+            >mdi-package-variant-closed</v-icon
+          >
           <p class="text-grey-darken-1 mt-4">No hay proveedores</p>
+        </div>
+
+        <!-- No search results -->
+        <div v-else-if="filteredProviders.length === 0" class="empty-state">
+          <v-icon size="64" color="grey-lighten-1">mdi-magnify-close</v-icon>
+          <p class="text-grey-darken-1 mt-4">No se encontraron proveedores</p>
+          <p class="text-grey-lighten-1 text-caption">
+            Intenta con otro término de búsqueda
+          </p>
         </div>
 
         <!-- Providers List -->
         <div v-else class="providers-list">
           <v-card
-            v-for="provider in providers"
+            v-for="provider in filteredProviders"
             :key="provider.id"
             class="provider-card"
             @click="handleProviderClick(provider)"
@@ -117,7 +158,7 @@ onMounted(() => {
             <v-icon size="28" color="white">mdi-account-circle</v-icon>
           </div>
           <div class="user-details">
-            <p class="user-name">{{ user.user_metadata?.name || 'Usuario' }}</p>
+            <p class="user-name">{{ user.user_metadata?.name || "Usuario" }}</p>
             <p class="user-email">{{ user.email }}</p>
           </div>
         </div>
@@ -173,6 +214,39 @@ onMounted(() => {
   font-weight: 700;
   margin: 0;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Search Bar */
+.search-container {
+  padding: 16px 16px 0 16px;
+}
+
+.search-input {
+  border-radius: 12px !important;
+}
+
+.search-input :deep(.v-field) {
+  border-radius: 12px !important;
+  background: white !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.search-input :deep(.v-field:hover) {
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.search-input :deep(.v-field--focused) {
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.25) !important;
+}
+
+.search-input :deep(.v-field__prepend-inner .v-icon) {
+  color: #667eea;
+  opacity: 0.7;
+}
+
+.search-input :deep(.v-field--focused .v-field__prepend-inner .v-icon) {
+  opacity: 1;
 }
 
 .providers-container {
@@ -280,16 +354,19 @@ onMounted(() => {
   width: 6px;
 }
 
-.v-navigation-drawer :deep(.v-navigation-drawer__content)::-webkit-scrollbar-track {
+.v-navigation-drawer
+  :deep(.v-navigation-drawer__content)::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.v-navigation-drawer :deep(.v-navigation-drawer__content)::-webkit-scrollbar-thumb {
+.v-navigation-drawer
+  :deep(.v-navigation-drawer__content)::-webkit-scrollbar-thumb {
   background: rgba(102, 126, 234, 0.3);
   border-radius: 3px;
 }
 
-.v-navigation-drawer :deep(.v-navigation-drawer__content)::-webkit-scrollbar-thumb:hover {
+.v-navigation-drawer
+  :deep(.v-navigation-drawer__content)::-webkit-scrollbar-thumb:hover {
   background: rgba(102, 126, 234, 0.5);
 }
 
@@ -366,4 +443,3 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(244, 67, 54, 0.2);
 }
 </style>
-
