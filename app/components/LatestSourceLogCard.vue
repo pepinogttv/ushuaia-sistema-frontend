@@ -211,7 +211,10 @@ defineExpose({
               <div class="text-h6 font-weight-bold">
                 {{ getStatusMessage(latestLog.status) }} (#{{ logCount }})
               </div>
-              <div class="text-caption opacity-80">
+              <div
+                class="text-caption opacity-80 text-wrap"
+                style="max-width: 800px"
+              >
                 {{ latestLog.friendly_message }}
                 <div v-if="latestLog.error_message">
                   ({{ latestLog.error_message }})

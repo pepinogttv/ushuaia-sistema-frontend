@@ -61,7 +61,6 @@ onMounted(() => {
 
 <template>
   <v-app>
-    <!-- <v-app-bar></v-app-bar> -->
     <!-- Navigation Drawer -->
     <v-navigation-drawer
       v-model="drawer"
