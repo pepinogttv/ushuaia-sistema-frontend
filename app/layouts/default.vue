@@ -1,22 +1,7 @@
 <script setup>
+const route = useRoute();
 const client = useSupabaseClient();
 const user = useSupabaseUser();
-
-const providers = ref([]);
-const pending = ref(true);
-const error = ref(null);
-const drawer = ref(true);
-const searchQuery = ref("");
-
-const filteredProviders = computed(() => {
-  if (!searchQuery.value.trim()) {
-    return providers.value;
-  }
-  const query = searchQuery.value.toLowerCase().trim();
-  return providers.value.filter((provider) =>
-    provider.name.toLowerCase().includes(query)
-  );
-});
 
 const signOut = async () => {
   const { error } = await client.auth.signOut();
@@ -27,157 +12,107 @@ const signOut = async () => {
   }
 };
 
-const fetchProviders = async () => {
-  try {
-    pending.value = true;
-    error.value = null;
+const navItems = [
+  { title: "Proveedores", icon: "mdi-truck-delivery", to: "/providers" },
+  // { title: "Documentación", icon: "mdi-book-open-variant", to: "/docs" },
+  // { title: "Chat IA", icon: "mdi-robot", to: "/chat" },
+];
 
-    const { data, error: fetchError } = await client
-      .from("providers")
-      .select("id, name")
-      .order("name", { ascending: true });
+const currentTab = computed(() => {
+  const path = route.path;
+  if (path.startsWith("/providers")) return "/providers";
+  if (path.startsWith("/docs")) return "/docs";
+  if (path.startsWith("/chat")) return "/chat";
+  return "/providers";
+});
 
-    if (fetchError) {
-      throw fetchError;
-    }
-
-    providers.value = data || [];
-  } catch (err) {
-    error.value = err;
-    providers.value = [];
-  } finally {
-    pending.value = false;
-  }
-};
-
-const handleProviderClick = (provider) => {
-  navigateTo(`/providers/${provider.name}?id=${provider.id}`);
-};
-
-onMounted(() => {
-  fetchProviders();
+const userInitials = computed(() => {
+  const name = user.value?.user_metadata?.name || user.value?.email || "U";
+  return name.charAt(0).toUpperCase();
 });
 </script>
 
 <template>
   <v-app>
-    <!-- Navigation Drawer -->
-    <v-navigation-drawer
-      v-model="drawer"
-      permanent
-      :width="280"
-      class="drawer-custom"
-    >
-      <!-- Header -->
-      <div class="drawer-header">
-        <div class="header-content">
-          <v-icon size="40" color="white" class="header-icon">mdi-store</v-icon>
-          <h2 class="header-title">Proveedores</h2>
-        </div>
-      </div>
-
-      <!-- Search Bar -->
-      <div class="search-container">
-        <v-text-field
-          v-model="searchQuery"
-          placeholder="Buscar proveedor..."
-          prepend-inner-icon="mdi-magnify"
-          variant="solo"
-          density="comfortable"
-          hide-details
-          clearable
-          class="search-input"
-          @click:clear="searchQuery = ''"
-        />
-      </div>
-
-      <div class="providers-container">
-        <!-- Loading -->
-        <div v-if="pending" class="text-center pa-8">
-          <v-progress-circular
-            indeterminate
-            color="primary"
-            size="48"
-            width="4"
+    <v-app-bar elevation="0" class="app-bar-custom" height="56">
+      <div class="navbar-content">
+        <!-- Logo -->
+        <div class="brand">
+          <img
+            src="/logo-electricidad-ushuaia.png"
+            alt="Electricidad Ushuaia S.R.L."
+            class="brand-logo"
           />
-          <p class="text-grey-darken-1 mt-4">Cargando...</p>
         </div>
 
-        <!-- Error -->
-        <v-alert v-else-if="error" type="error" class="ma-4" prominent>
-          <strong>Error</strong>
-          <div>{{ error.message }}</div>
-        </v-alert>
+        <div class="nav-divider" />
 
-        <!-- Empty -->
-        <div v-else-if="providers.length === 0" class="empty-state">
-          <v-icon size="64" color="grey-lighten-1"
-            >mdi-package-variant-closed</v-icon
+        <!-- Navegación con pills -->
+        <div class="nav-items">
+          <NuxtLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            :class="['nav-pill', { 'nav-pill--active': currentTab === item.to }]"
           >
-          <p class="text-grey-darken-1 mt-4">No hay proveedores</p>
+            <v-icon size="18">{{ item.icon }}</v-icon>
+            <span>{{ item.title }}</span>
+          </NuxtLink>
         </div>
 
-        <!-- No search results -->
-        <div v-else-if="filteredProviders.length === 0" class="empty-state">
-          <v-icon size="64" color="grey-lighten-1">mdi-magnify-close</v-icon>
-          <p class="text-grey-darken-1 mt-4">No se encontraron proveedores</p>
-          <p class="text-grey-lighten-1 text-caption">
-            Intenta con otro término de búsqueda
-          </p>
-        </div>
+        <v-spacer />
 
-        <!-- Providers List -->
-        <div v-else class="providers-list">
-          <v-card
-            v-for="provider in filteredProviders"
-            :key="provider.id"
-            class="provider-card"
-            @click="handleProviderClick(provider)"
-            elevation="0"
-          >
-            <div class="provider-card-inner">
-              <div class="provider-icon-wrapper">
-                <v-icon size="32" color="white">mdi-package-variant</v-icon>
+        <!-- Usuario con menú -->
+        <v-menu offset-y transition="slide-y-transition">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              variant="text"
+              class="user-btn"
+              rounded="pill"
+            >
+              <v-avatar size="30" class="user-avatar mr-2">
+                <span class="avatar-text">{{ userInitials }}</span>
+              </v-avatar>
+              <span class="user-name-btn">{{
+                user?.user_metadata?.name || "Usuario"
+              }}</span>
+              <v-icon size="16" class="ml-1" style="opacity: 0.7">mdi-chevron-down</v-icon>
+            </v-btn>
+          </template>
+
+          <v-card min-width="240" class="user-menu-card">
+            <div class="user-menu-header">
+              <v-avatar size="48" color="primary">
+                <span class="avatar-text-lg">{{ userInitials }}</span>
+              </v-avatar>
+              <div class="user-menu-info">
+                <p class="user-menu-name">
+                  {{ user?.user_metadata?.name || "Usuario" }}
+                </p>
+                <p class="user-menu-email">{{ user?.email }}</p>
               </div>
-              <div class="provider-info">
-                <h3 class="provider-name">{{ provider.name }}</h3>
-                <p class="provider-subtitle">Ver detalles</p>
-              </div>
-              <v-icon class="provider-arrow" size="24" color="primary">
-                mdi-chevron-right
-              </v-icon>
             </div>
+
+            <v-divider />
+
+            <v-list density="compact" class="py-1">
+              <v-list-item @click="signOut" class="logout-item">
+                <template #prepend>
+                  <v-icon color="error" size="20">mdi-logout</v-icon>
+                </template>
+                <v-list-item-title class="logout-text"
+                  >Cerrar sesión</v-list-item-title
+                >
+              </v-list-item>
+            </v-list>
           </v-card>
-        </div>
+        </v-menu>
       </div>
+    </v-app-bar>
 
-      <!-- User Footer -->
-      <div class="drawer-footer">
-        <div v-if="user" class="user-info">
-          <div class="user-avatar">
-            <v-icon size="28" color="white">mdi-account-circle</v-icon>
-          </div>
-          <div class="user-details">
-            <p class="user-name">{{ user.user_metadata?.name || "Usuario" }}</p>
-            <p class="user-email">{{ user.email }}</p>
-          </div>
-        </div>
-        <v-btn
-          @click="signOut"
-          variant="outlined"
-          color="error"
-          size="small"
-          class="logout-btn"
-          prepend-icon="mdi-logout"
-        >
-          Cerrar Sesión
-        </v-btn>
-      </div>
-    </v-navigation-drawer>
-
-    <!-- Main Content -->
-    <v-main>
-      <v-container fluid>
+    <v-main class="main-content">
+      <v-container fluid class="pa-6">
         <slot />
       </v-container>
     </v-main>
@@ -185,261 +120,149 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.drawer-custom {
-  background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%);
+.app-bar-custom {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
 }
 
-.drawer-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 32px 24px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.header-content {
+.navbar-content {
   display: flex;
   align-items: center;
+  width: 100%;
+  padding: 0 20px;
   gap: 16px;
 }
 
-.header-icon {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 12px;
-  border-radius: 16px;
-  backdrop-filter: blur(10px);
-}
-
-.header-title {
-  color: white;
-  font-size: 26px;
-  font-weight: 700;
-  margin: 0;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* Search Bar */
-.search-container {
-  padding: 16px 16px 0 16px;
-}
-
-.search-input {
-  border-radius: 12px !important;
-}
-
-.search-input :deep(.v-field) {
-  border-radius: 12px !important;
-  background: white !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
-}
-
-.search-input :deep(.v-field:hover) {
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
-}
-
-.search-input :deep(.v-field--focused) {
-  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.25) !important;
-}
-
-.search-input :deep(.v-field__prepend-inner .v-icon) {
-  color: #667eea;
-  opacity: 0.7;
-}
-
-.search-input :deep(.v-field--focused .v-field__prepend-inner .v-icon) {
-  opacity: 1;
-}
-
-.providers-container {
-  padding: 20px 16px;
-  padding-bottom: 180px; /* Espacio para el footer fijo */
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  text-align: center;
-}
-
-.providers-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.provider-card {
-  cursor: pointer;
-  border-radius: 16px !important;
-  border: 2px solid transparent;
-  background: white;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.provider-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2) !important;
-  border-color: #667eea;
-}
-
-.provider-card:active {
-  transform: translateY(-2px);
-}
-
-.provider-card-inner {
+.brand {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 18px 20px;
 }
 
-.provider-icon-wrapper {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.brand-logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.nav-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.25);
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-  transition: transform 0.3s ease;
 }
 
-.provider-card:hover .provider-icon-wrapper {
-  transform: rotate(5deg) scale(1.05);
+/* Nav pills */
+.nav-items {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.provider-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.provider-name {
-  font-size: 18px;
-  font-weight: 600;
-  color: #2c3e50;
-  margin: 0 0 4px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.provider-subtitle {
+.nav-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 8px;
   font-size: 13px;
-  color: #7f8c8d;
-  margin: 0;
   font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  transition: all 0.2s ease;
 }
 
-.provider-arrow {
-  flex-shrink: 0;
-  opacity: 0.6;
-  transition: all 0.3s ease;
+.nav-pill:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.12);
 }
 
-.provider-card:hover .provider-arrow {
-  opacity: 1;
-  transform: translateX(4px);
+.nav-pill--active {
+  color: white;
+  background: rgba(255, 255, 255, 0.2);
+  font-weight: 600;
 }
 
-/* Scrollbar personalizado */
-.v-navigation-drawer :deep(.v-navigation-drawer__content) {
-  overflow-y: auto;
-}
-
-.v-navigation-drawer :deep(.v-navigation-drawer__content)::-webkit-scrollbar {
-  width: 6px;
-}
-
-.v-navigation-drawer
-  :deep(.v-navigation-drawer__content)::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.v-navigation-drawer
-  :deep(.v-navigation-drawer__content)::-webkit-scrollbar-thumb {
-  background: rgba(102, 126, 234, 0.3);
-  border-radius: 3px;
-}
-
-.v-navigation-drawer
-  :deep(.v-navigation-drawer__content)::-webkit-scrollbar-thumb:hover {
-  background: rgba(102, 126, 234, 0.5);
-}
-
-/* User Footer */
-.drawer-footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: white;
-  border-top: 1px solid #e0e0e0;
-  padding: 16px;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #f8f9fa 100%);
-  border-radius: 12px;
+/* User */
+.user-btn {
+  text-transform: none;
+  padding: 4px 10px 4px 4px !important;
+  height: auto !important;
+  color: white !important;
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.2) !important;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.user-name-btn {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.avatar-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+}
+
+.avatar-text-lg {
+  font-size: 17px;
+  font-weight: 600;
+  color: white;
+}
+
+/* User menu dropdown */
+.user-menu-card {
+  border-radius: 12px !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15) !important;
+  overflow: hidden;
+}
+
+.user-menu-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
-.user-details {
-  flex: 1;
-  min-width: 0;
+.user-menu-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.user-name {
+.user-menu-name {
   font-size: 14px;
   font-weight: 600;
-  color: #2c3e50;
-  margin: 0 0 2px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-email {
-  font-size: 12px;
-  color: #7f8c8d;
+  color: #1f2937;
   margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.logout-btn {
-  width: 100%;
-  text-transform: none;
-  font-weight: 600;
-  border-width: 2px !important;
-  transition: all 0.3s ease;
+.user-menu-email {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
 }
 
-.logout-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.2);
+.logout-item {
+  margin: 4px 8px;
+  border-radius: 8px;
+}
+
+.logout-item:hover {
+  background-color: #fef2f2 !important;
+}
+
+.logout-text {
+  font-size: 14px;
+  color: #ef4444;
+  font-weight: 500;
+}
+
+.main-content {
+  background-color: #f9fafb;
 }
 </style>

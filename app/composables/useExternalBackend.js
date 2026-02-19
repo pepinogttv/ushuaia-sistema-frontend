@@ -67,7 +67,7 @@ export function useExternalBackend() {
       throw new Error(
         data.error?.description ||
           data.message ||
-          `HTTP ${response.status}: ${response.statusText}`
+          `HTTP ${response.status}: ${response.statusText}`,
       );
     }
 
@@ -127,7 +127,7 @@ export function useExternalBackend() {
       throw new Error(
         data.error?.description ||
           data.message ||
-          `HTTP ${response.status}: ${response.statusText}`
+          `HTTP ${response.status}: ${response.statusText}`,
       );
     }
 
@@ -149,7 +149,7 @@ export function useExternalBackend() {
       {
         method: "GET",
       },
-      true
+      true,
     );
   };
 
@@ -172,7 +172,7 @@ export function useExternalBackend() {
       {
         method: "DELETE",
       },
-      true
+      true,
     );
   };
 
@@ -186,7 +186,7 @@ export function useExternalBackend() {
       {
         method: "POST",
       },
-      true
+      true,
     );
   };
 
@@ -205,7 +205,7 @@ export function useExternalBackend() {
       {
         method: "POST",
       },
-      true
+      true,
     );
   };
 
@@ -224,7 +224,104 @@ export function useExternalBackend() {
       {
         method: "DELETE",
       },
-      true
+      true,
+    );
+  };
+
+  /**
+   * Analiza un archivo Excel y devuelve los fingerprints de las filas
+   * @param {File} file - Archivo Excel a analizar (.xlsx o .xls)
+   * @returns {Promise<object>} - Resultados del análisis con fingerprints
+   */
+  const analyzeExcelFingerprint = async (file) => {
+    if (!file) {
+      throw new Error("file es requerido");
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const url = `${baseUrl}/api/sources/analyze-fingerprint`;
+
+    // Obtener token de autenticación
+    const {
+      data: { session },
+      error: sessionError,
+    } = await client.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      throw new Error("No se pudo obtener el token de autenticación");
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: formData,
+    });
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = { message: await response.text() };
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        data.error?.description ||
+          data.message ||
+          `HTTP ${response.status}: ${response.statusText}`,
+      );
+    }
+
+    return data.data || data;
+  };
+
+  /**
+   * Clasifica fingerprints usando el agente IA (via backend proxy a n8n)
+   * @param {object} fingerprints - Resultado del análisis de fingerprints
+   * @returns {Promise<object>} - Clasificaciones del agente IA
+   */
+  const classifyFingerprint = async (fingerprints) => {
+    if (!fingerprints) {
+      throw new Error("fingerprints es requerido");
+    }
+
+    return await request(
+      "/api/sources/classify-fingerprint",
+      {
+        method: "POST",
+        body: JSON.stringify({ fingerprints }),
+      },
+      true,
+    );
+  };
+
+  /**
+   * Crea una nueva fuente basada en fingerprints
+   * @param {object} params - { providerId, sourceName, friendlyName, fingerprintConfig }
+   * @returns {Promise<object>} - La fuente creada
+   */
+  const createFingerprintSource = async ({
+    providerId,
+    sourceName,
+    friendlyName,
+    fingerprintConfig,
+  }) => {
+    return await request(
+      "/api/sources/create-fingerprint-source",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          providerId,
+          sourceName,
+          friendlyName,
+          fingerprintConfig,
+        }),
+      },
+      true,
     );
   };
 
@@ -239,6 +336,11 @@ export function useExternalBackend() {
     executeSource,
     cancelSourceExecution,
     deleteProviderSourceLog,
+    analyzeExcelFingerprint,
+
+    // Fingerprint source
+    classifyFingerprint,
+    createFingerprintSource,
 
     // Propiedades útiles
     baseUrl,
