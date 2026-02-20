@@ -85,7 +85,7 @@ onMounted(() => {
     <ProvidersDrawer />
     <div class="d-flex flex-column fill-height">
       <!-- Header -->
-      <div class="provider-header">
+      <div class="provider-header rounded">
         <div class="d-flex align-center justify-space-between">
           <div>
             <h1 class="provider-title">{{ providerName }}</h1>
@@ -337,28 +337,29 @@ onMounted(() => {
 <style scoped>
 /* Provider Header */
 .provider-header {
-  background: white;
-  padding: 16px 24px 0 24px;
-  border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  padding: 20px 24px 0 24px;
+  border-bottom: 1px solid #475569;
 }
 
 .provider-title {
   font-size: 22px;
   font-weight: 700;
-  color: #1f2937;
+  color: white;
   margin: 0;
 }
 
 .id-chip {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  color: white !important;
+  background: rgba(102, 126, 234, 0.25) !important;
+  color: #a5b4fc !important;
   font-size: 11px;
   font-weight: 600;
+  border: 1px solid rgba(102, 126, 234, 0.3);
 }
 
 .provider-sources-count {
   font-size: 12px;
-  color: #9ca3af;
+  color: #94a3b8;
   font-weight: 500;
 }
 
@@ -374,20 +375,20 @@ onMounted(() => {
 }
 
 .config-btn {
-  color: #6b7280 !important;
+  color: #94a3b8 !important;
   border-radius: 8px !important;
 }
 
 .config-btn:hover {
-  color: #667eea !important;
-  background: rgba(102, 126, 234, 0.08) !important;
+  color: white !important;
+  background: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Tab pills */
 .tab-pills {
   display: flex;
   gap: 4px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .tab-pill {
@@ -399,7 +400,7 @@ onMounted(() => {
   border-radius: 8px 8px 0 0;
   font-size: 13px;
   font-weight: 500;
-  color: #6b7280;
+  color: #94a3b8;
   background: transparent;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -407,15 +408,15 @@ onMounted(() => {
 }
 
 .tab-pill:hover {
-  color: #667eea;
-  background: rgba(102, 126, 234, 0.04);
+  color: white;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .tab-pill--active {
-  color: #667eea;
+  color: white;
   font-weight: 600;
   border-bottom-color: #667eea;
-  background: rgba(102, 126, 234, 0.06);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Sources panel (left) */
