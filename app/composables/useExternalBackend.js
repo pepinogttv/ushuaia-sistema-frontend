@@ -325,6 +325,26 @@ export function useExternalBackend() {
     );
   };
 
+  /**
+   * Actualiza la prioridad de un source
+   * @param {string} sourceId - UUID del source
+   * @param {number} priority - Nueva prioridad (1 = máxima)
+   * @returns {Promise<object>} - Source actualizado
+   */
+  const updateSourcePriority = async (sourceId, priority) => {
+    if (!sourceId) throw new Error("sourceId es requerido");
+    if (!priority) throw new Error("priority es requerido");
+
+    return await request(
+      `/api/sources/${sourceId}/priority`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ priority }),
+      },
+      true,
+    );
+  };
+
   return {
     // Método genérico
     request,
@@ -341,6 +361,9 @@ export function useExternalBackend() {
     // Fingerprint source
     classifyFingerprint,
     createFingerprintSource,
+
+    // Source priority
+    updateSourcePriority,
 
     // Propiedades útiles
     baseUrl,

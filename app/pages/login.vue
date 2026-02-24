@@ -139,7 +139,7 @@ const toggleSignMode = () => {
 
               <!-- Formulario -->
               <v-form
-                ref="form"
+                ref="formRef"
                 v-model="formValid"
                 @submit.prevent="handleSubmit"
               >

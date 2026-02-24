@@ -2,6 +2,7 @@
 const client = useSupabaseClient();
 const route = useRoute();
 const router = useRouter();
+const { updateSourcePriority } = useExternalBackend();
 
 const providerName = computed(() => route.params.name);
 const providerId = computed(() => route.query.id);
@@ -9,6 +10,7 @@ const providerId = computed(() => route.query.id);
 const providerSources = ref([]);
 const pending = ref(true);
 const error = ref(null);
+const prioritySaving = ref(false);
 
 // Main tab synced with URL
 const mainTab = ref(route.query.tab || "fuentes");
@@ -22,7 +24,7 @@ const selectedSource = ref(null);
 
 // Provider config dialog
 const showConfigDialog = ref(false);
-
+ 
 // Add source dialog
 const showAddSourceDialog = ref(false);
 
@@ -41,6 +43,40 @@ const reload = () => {
   }, 100);
 };
 
+const savePriority = async (source, newPriority) => {
+  const num = Number(newPriority);
+  if (!Number.isInteger(num) || num < 1) return;
+  if (num === source.priority) return;
+
+  try {
+    prioritySaving.value = true;
+    await updateSourcePriority(source.id, num);
+    source.priority = num;
+  } catch (err) {
+    console.error("Error actualizando prioridad:", err);
+  } finally {
+    prioritySaving.value = false;
+  }
+};
+
+const ivaIncludedSaving = ref(false);
+const saveIvaIncluded = async (source, newValue) => {
+  if (newValue === source.iva_included) return;
+  try {
+    ivaIncludedSaving.value = true;
+    const { error: updateError } = await client
+      .from("provider_sources")
+      .update({ iva_included: newValue })
+      .eq("id", source.id);
+    if (updateError) throw updateError;
+    source.iva_included = newValue;
+  } catch (err) {
+    console.error("Error actualizando iva_included:", err);
+  } finally {
+    ivaIncludedSaving.value = false;
+  }
+};
+
 const fetchProviderSources = async () => {
   if (!providerId.value) {
     pending.value = false;
@@ -53,9 +89,9 @@ const fetchProviderSources = async () => {
 
     const { data, error: fetchError } = await client
       .from("provider_sources")
-      .select("id, name, type, friendly_name")
+      .select("id, name, type, friendly_name, priority, iva_included")
       .eq("provider_id", providerId.value)
-      .order("name", { ascending: true });
+      .order("priority", { ascending: true });
 
     if (fetchError) {
       throw fetchError;
@@ -224,8 +260,25 @@ onMounted(() => {
                   <v-list-item-title class="source-name">
                     {{ source.friendly_name || source.name }}
                   </v-list-item-title>
-                  <v-list-item-subtitle class="source-type">
-                    {{ source.type }}
+                  <v-list-item-subtitle class="source-type d-flex align-center ga-1">
+                    <span>{{ source.type }}</span>
+                    <v-chip
+                      size="x-small"
+                      variant="elevated"
+                      class="priority-chip"
+                      :color="source.priority <= 1 ? 'amber-darken-2' : 'blue-grey-lighten-1'"
+                    >
+                      #{{ source.priority }}
+                    </v-chip>
+                    <v-chip
+                      v-if="source.iva_included"
+                      size="x-small"
+                      variant="tonal"
+                      color="green"
+                      class="ml-1"
+                    >
+                      IVA inc.
+                    </v-chip>
                   </v-list-item-subtitle>
                 </v-list-item>
               </v-list>
@@ -269,14 +322,63 @@ onMounted(() => {
                       </span>
                     </div>
                   </div>
-                  <v-btn
-                    icon="mdi-reload"
-                    variant="text"
-                    size="small"
-                    class="reload-btn"
-                    @click="reload"
-                    :loading="reloading"
-                  />
+                  <div class="d-flex align-center ga-2">
+                    <v-text-field
+                      :model-value="selectedSource.priority"
+                      @update:model-value="savePriority(selectedSource, $event)"
+                      type="number"
+                      min="1"
+                      label="Prioridad"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                      :loading="prioritySaving"
+                      style="max-width: 100px"
+                      hint="1 = máxima"
+                    />
+                    <v-tooltip location="bottom" max-width="300">
+                      <template #activator="{ props: tooltipProps }">
+                        <v-icon
+                          v-bind="tooltipProps"
+                          icon="mdi-information-outline"
+                          size="20"
+                          color="grey"
+                          class="info-icon"
+                        />
+                      </template>
+                      La prioridad define qué fuente gana cuando varias tienen el mismo producto. Menor número = mayor prioridad (1 es la máxima). Si dos fuentes tienen la misma prioridad, gana la que se ejecutó más recientemente.
+                    </v-tooltip>
+                    <v-checkbox
+                      :model-value="selectedSource.iva_included || false"
+                      @update:model-value="saveIvaIncluded(selectedSource, $event)"
+                      label="IVA incluido"
+                      density="compact"
+                      hide-details
+                      :loading="ivaIncludedSaving"
+                      class="ml-2"
+                      style="max-width: 160px"
+                    />
+                    <v-tooltip location="bottom" max-width="300">
+                      <template #activator="{ props: ivaTooltipProps }">
+                        <v-icon
+                          v-bind="ivaTooltipProps"
+                          icon="mdi-information-outline"
+                          size="20"
+                          color="grey"
+                          class="info-icon"
+                        />
+                      </template>
+                      Indica si los precios de esta fuente ya incluyen IVA. Si se activa, el sistema descontara el IVA automaticamente al mergear los productos.
+                    </v-tooltip>
+                    <v-btn
+                      icon="mdi-reload"
+                      variant="text"
+                      size="small"
+                      class="reload-btn"
+                      @click="reload"
+                      :loading="reloading"
+                    />
+                  </div>
                 </div>
 
                 <!-- Latest Log Card -->
@@ -326,7 +428,7 @@ onMounted(() => {
         <!-- Productos Tab -->
         <v-tabs-window-item value="productos" class="fill-height">
           <div class="pa-6">
-            <ProviderProductsTable v-if="providerId" :provider-id="providerId" />
+            <ProviderProductsTable v-if="providerId" :provider-id="providerId" :sources="providerSources" />
           </div>
         </v-tabs-window-item>
       </v-tabs-window>
@@ -482,6 +584,14 @@ onMounted(() => {
   color: #9ca3af;
 }
 
+.priority-chip {
+  font-weight: 700;
+  font-size: 10px !important;
+  min-width: 24px;
+  height: 18px !important;
+  padding: 0 5px !important;
+}
+
 /* Source detail header */
 .source-detail-title {
   font-size: 18px;
@@ -498,5 +608,15 @@ onMounted(() => {
 .reload-btn:hover {
   color: #667eea !important;
   background: rgba(102, 126, 234, 0.08) !important;
+}
+
+.info-icon {
+  cursor: help;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.info-icon:hover {
+  opacity: 1;
 }
 </style>
