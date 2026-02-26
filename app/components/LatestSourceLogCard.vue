@@ -20,6 +20,9 @@ const error = ref(null);
 
 // Canal de realtime
 let realtimeChannel = null;
+let undoTimeoutId = null;
+
+const UNDO_TIMEOUT_MS = 120_000;
 
 // Buscar el último log y contar todos los logs
 const fetchLatestLog = async () => {
@@ -57,6 +60,14 @@ const fetchLatestLog = async () => {
   }
 };
 
+// Limpiar timeout de undo si está corriendo
+const clearUndoTimeout = () => {
+  if (undoTimeoutId !== null) {
+    clearTimeout(undoTimeoutId);
+    undoTimeoutId = null;
+  }
+};
+
 // Configurar suscripción de realtime
 const setupRealtimeSubscription = () => {
   realtimeChannel = supabase
@@ -71,6 +82,11 @@ const setupRealtimeSubscription = () => {
       },
       (payload) => {
         console.log("Realtime update received:", payload);
+        // Si el rollback terminó (DELETE del log), limpiar el estado de undoing
+        if (payload.eventType === "DELETE" && undoing.value) {
+          clearUndoTimeout();
+          undoing.value = false;
+        }
         fetchLatestLog();
       }
     )
@@ -95,10 +111,23 @@ const handleUndoExecution = async () => {
     error.value = null;
     undoDialog.value = false;
 
-    await deleteProviderSourceLog(latestLog.value.id);
+    // Capturar el id ANTES del await para usarlo en el timeout
+    const originalLogId = latestLog.value.id;
 
-    // Actualizar el último log
-    await fetchLatestLog();
+    // El backend encola el job y retorna inmediatamente con { message, jobId }
+    await deleteProviderSourceLog(originalLogId);
+
+    // Iniciar timeout de 120s como fallback si Realtime no llega
+    undoTimeoutId = setTimeout(async () => {
+      undoTimeoutId = null;
+      await fetchLatestLog();
+      // Si el log sigue siendo el mismo, el rollback no terminó
+      if (latestLog.value && latestLog.value.id === originalLogId) {
+        error.value =
+          "El rollback está tomando más tiempo del esperado. Si el log no desaparece, refrescá la página.";
+      }
+      undoing.value = false;
+    }, UNDO_TIMEOUT_MS);
   } catch (err) {
     console.error("Error deshaciendo sincronización:", err);
     if (err.message.includes("Only the most recent log")) {
@@ -107,7 +136,6 @@ const handleUndoExecution = async () => {
     } else {
       error.value = err.message || "Error al deshacer la sincronización";
     }
-  } finally {
     undoing.value = false;
   }
 };
@@ -132,9 +160,9 @@ const getStatusIcon = (status) => {
   return icons[status] || "mdi-information-outline";
 };
 
-// Verificar si el source es de tipo file-source
+// Verificar si el source es de tipo file-source o fingerprint-source (ambos eliminan archivo físico)
 const isFileSource = computed(() => {
-  return props.source.type === "file-source";
+  return props.source.type === "file-source" || props.source.type === "fingerprint-source";
 });
 
 // Buscar el último log al montar el componente
@@ -145,6 +173,7 @@ onMounted(() => {
 
 // Limpiar suscripción al desmontar
 onUnmounted(() => {
+  clearUndoTimeout();
   if (realtimeChannel) {
     supabase.removeChannel(realtimeChannel);
     realtimeChannel = null;
@@ -166,6 +195,16 @@ defineExpose({
       :source="source"
       :source-log="latestLog"
     />
+
+    <v-alert
+      v-if="undoing"
+      type="info"
+      variant="tonal"
+      class="mb-4"
+      prepend-icon="mdi-undo-variant"
+    >
+      Rollback en progreso...
+    </v-alert>
 
     <v-alert
       v-if="error"
