@@ -229,21 +229,31 @@ export function useExternalBackend() {
   };
 
   /**
-   * Analiza un archivo Excel y devuelve los fingerprints de las filas
-   * @param {File} file - Archivo Excel a analizar (.xlsx o .xls)
-   * @returns {Promise<object>} - Resultados del análisis con fingerprints
+   * Consulta el estado de un job de rollback en BullMQ
+   * @param {string|number} jobId - ID del job de BullMQ
+   * @returns {Promise<object>} - { found, jobId?, state?, progress?, failedReason? }
    */
-  const analyzeExcelFingerprint = async (file) => {
-    if (!file) {
-      throw new Error("file es requerido");
+  const getRollbackJobStatus = async (jobId) => {
+    if (!jobId) {
+      throw new Error("jobId es requerido");
     }
+
+    return await request(`/api/sources/rollback-job/${jobId}`, {}, true);
+  };
+
+  /**
+   * Sube un Excel y devuelve la lista de hojas (sin procesar filas)
+   * @param {File} file - Archivo Excel
+   * @returns {Promise<{filepath: string, worksheets: Array<{name: string, index: number}>}>}
+   */
+  const previewWorksheets = async (file) => {
+    if (!file) throw new Error("file es requerido");
 
     const formData = new FormData();
     formData.append("file", file);
 
-    const url = `${baseUrl}/api/sources/analyze-fingerprint`;
+    const url = `${baseUrl}/api/sources/preview-worksheets`;
 
-    // Obtener token de autenticación
     const {
       data: { session },
       error: sessionError,
@@ -277,6 +287,142 @@ export function useExternalBackend() {
     }
 
     return data.data || data;
+  };
+
+  /**
+   * Analiza un archivo Excel y devuelve los fingerprints de las filas
+   * @param {File|null} file - Archivo Excel a analizar (si es upload nuevo)
+   * @param {object} [options] - { filepath, includedWorksheets } si ya se hizo preview
+   * @returns {Promise<object>} - Resultados del análisis con fingerprints
+   */
+  const analyzeExcelFingerprint = async (file, options = {}) => {
+    const { filepath, includedWorksheets } = options;
+
+    const {
+      data: { session },
+      error: sessionError,
+    } = await client.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      throw new Error("No se pudo obtener el token de autenticación");
+    }
+
+    const url = `${baseUrl}/api/sources/analyze-fingerprint`;
+
+    let response;
+
+    if (filepath) {
+      // Use previously uploaded file by filepath
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ filepath, includedWorksheets }),
+      });
+    } else if (file) {
+      // Upload new file
+      const formData = new FormData();
+      formData.append("file", file);
+
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+    } else {
+      throw new Error("file o filepath es requerido");
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = { message: await response.text() };
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        data.error?.description ||
+          data.message ||
+          `HTTP ${response.status}: ${response.statusText}`,
+      );
+    }
+
+    return data.data || data;
+  };
+
+  /**
+   * Valida un archivo Excel contra los fingerprints almacenados de un source
+   * @param {string} sourceName - Nombre del source
+   * @param {File} file - Archivo Excel a validar
+   * @returns {Promise<{fileInfo, driftResult}>} - Resultado de la validación
+   */
+  const validateFingerprintUpload = async (sourceName, file) => {
+    if (!sourceName) throw new Error("sourceName es requerido");
+    if (!file) throw new Error("file es requerido");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const url = `${baseUrl}/api/sources/${sourceName}/validate-upload`;
+
+    const {
+      data: { session },
+      error: sessionError,
+    } = await client.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      throw new Error("No se pudo obtener el token de autenticación");
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: formData,
+    });
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = { message: await response.text() };
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        data.error?.description ||
+          data.message ||
+          `HTTP ${response.status}: ${response.statusText}`,
+      );
+    }
+
+    return data.data || data;
+  };
+
+  /**
+   * Ejecuta un source con un filepath específico (archivo ya subido)
+   * @param {string} sourceName - Nombre del source
+   * @param {string} filepath - Path del archivo en el servidor
+   * @returns {Promise<object>}
+   */
+  const executeSourceWithFile = async (sourceName, filepath) => {
+    if (!sourceName) throw new Error("sourceName es requerido");
+    if (!filepath) throw new Error("filepath es requerido");
+
+    return await request(
+      `/api/sources/${sourceName}/execute`,
+      {
+        method: "POST",
+        body: JSON.stringify({ filepath }),
+      },
+      true,
+    );
   };
 
   /**
@@ -356,11 +502,15 @@ export function useExternalBackend() {
     executeSource,
     cancelSourceExecution,
     deleteProviderSourceLog,
+    getRollbackJobStatus,
     analyzeExcelFingerprint,
 
     // Fingerprint source
+    previewWorksheets,
     classifyFingerprint,
     createFingerprintSource,
+    validateFingerprintUpload,
+    executeSourceWithFile,
 
     // Source priority
     updateSourcePriority,

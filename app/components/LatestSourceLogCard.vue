@@ -7,6 +7,8 @@ const props = defineProps({
 });
 
 const { deleteProviderSourceLog } = useExternalBackend();
+
+const rollbackJobId = ref(null);
 const supabase = useSupabaseClient();
 
 const sourceExecutionLogsDialog = ref(false);
@@ -86,6 +88,7 @@ const setupRealtimeSubscription = () => {
         if (payload.eventType === "DELETE" && undoing.value) {
           clearUndoTimeout();
           undoing.value = false;
+          rollbackJobId.value = null;
         }
         fetchLatestLog();
       }
@@ -115,7 +118,8 @@ const handleUndoExecution = async () => {
     const originalLogId = latestLog.value.id;
 
     // El backend encola el job y retorna inmediatamente con { message, jobId }
-    await deleteProviderSourceLog(originalLogId);
+    const result = await deleteProviderSourceLog(originalLogId);
+    rollbackJobId.value = result?.jobId ?? null;
 
     // Iniciar timeout de 120s como fallback si Realtime no llega
     undoTimeoutId = setTimeout(async () => {
@@ -127,6 +131,7 @@ const handleUndoExecution = async () => {
           "El rollback está tomando más tiempo del esperado. Si el log no desaparece, refrescá la página.";
       }
       undoing.value = false;
+      rollbackJobId.value = null;
     }, UNDO_TIMEOUT_MS);
   } catch (err) {
     console.error("Error deshaciendo sincronización:", err);
@@ -137,7 +142,16 @@ const handleUndoExecution = async () => {
       error.value = err.message || "Error al deshacer la sincronización";
     }
     undoing.value = false;
+    rollbackJobId.value = null;
   }
+};
+
+// Manejar fallo del job de rollback (emitido por RollbackJobStatus)
+const handleJobFailed = (reason) => {
+  error.value = `El rollback falló: ${reason}`;
+  undoing.value = false;
+  rollbackJobId.value = null;
+  clearUndoTimeout();
 };
 
 // Obtener el mensaje según el estado
@@ -196,15 +210,23 @@ defineExpose({
       :source-log="latestLog"
     />
 
-    <v-alert
-      v-if="undoing"
-      type="info"
-      variant="tonal"
-      class="mb-4"
-      prepend-icon="mdi-undo-variant"
-    >
-      Rollback en progreso...
-    </v-alert>
+    <template v-if="undoing">
+      <RollbackJobStatus
+        v-if="rollbackJobId"
+        :job-id="rollbackJobId"
+        class="mb-4"
+        @job-failed="handleJobFailed"
+      />
+      <v-alert
+        v-else
+        type="info"
+        variant="tonal"
+        class="mb-4"
+        prepend-icon="mdi-undo-variant"
+      >
+        Rollback en progreso...
+      </v-alert>
+    </template>
 
     <v-alert
       v-if="error"

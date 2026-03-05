@@ -7,17 +7,26 @@ const props = defineProps({
 });
 
 const client = useSupabaseClient();
-const { sourceUploadFile, sourceListFiles, sourceDeleteFile } =
-  useExternalBackend();
+const {
+  sourceListFiles,
+  sourceDeleteFile,
+  validateFingerprintUpload,
+  executeSourceWithFile,
+} = useExternalBackend();
 
 // State
 const files = ref([]);
 const loading = ref(false);
 const error = ref(null);
-const uploading = ref(false);
-const uploadDialog = ref(false);
 const fingerprintConfig = ref(null);
 const configLoading = ref(true);
+
+// Validation state
+const validationDialog = ref(false);
+const validating = ref(false);
+const driftResult = ref(null);
+const pendingFileInfo = ref(null);
+const executing = ref(false);
 
 // Load fingerprint config from DB
 const loadConfig = async () => {
@@ -71,23 +80,62 @@ const deleteFile = async (filename) => {
 };
 
 const handleFilesSelected = async (selectedFiles) => {
-  uploadDialog.value = true;
-  uploading.value = true;
+  const file = selectedFiles[0];
+  if (!file) return;
+
+  validationDialog.value = true;
+  validating.value = true;
+  driftResult.value = null;
+  pendingFileInfo.value = null;
 
   try {
-    for (const file of selectedFiles) {
-      await sourceUploadFile(props.source.name, file);
+    const result = await validateFingerprintUpload(props.source.name, file);
+    driftResult.value = result.driftResult;
+    pendingFileInfo.value = result.fileInfo;
+    validating.value = false;
+
+    // Auto-enqueue if structure is OK
+    if (result.driftResult.status === "ok") {
+      await confirmUpload();
     }
-    await loadFiles();
-    uploading.value = false;
-    setTimeout(() => {
-      uploadDialog.value = false;
-    }, 800);
   } catch (err) {
-    uploading.value = false;
-    uploadDialog.value = false;
-    error.value = err.message || "Error al subir los archivos";
+    validating.value = false;
+    validationDialog.value = false;
+    error.value = err.message || "Error al validar el archivo";
   }
+};
+
+const confirmUpload = async () => {
+  try {
+    executing.value = true;
+    await executeSourceWithFile(
+      props.source.name,
+      pendingFileInfo.value.path,
+    );
+    executing.value = false;
+    validationDialog.value = false;
+    driftResult.value = null;
+    pendingFileInfo.value = null;
+    await loadFiles();
+  } catch (err) {
+    executing.value = false;
+    validationDialog.value = false;
+    error.value = err.message || "Error al ejecutar la sincronización";
+  }
+};
+
+const cancelUpload = async () => {
+  try {
+    if (pendingFileInfo.value?.filename) {
+      await sourceDeleteFile(props.source.name, pendingFileInfo.value.filename);
+    }
+  } catch (err) {
+    console.error("Error eliminando archivo cancelado:", err);
+  }
+  validationDialog.value = false;
+  driftResult.value = null;
+  pendingFileInfo.value = null;
+  await loadFiles();
 };
 
 const handleDropZoneError = (errorMessage) => {
@@ -115,6 +163,10 @@ const formatDate = (dateString) => {
     month: "long",
     day: "numeric",
   });
+};
+
+const formatPercentage = (rate) => {
+  return (rate * 100).toFixed(1) + "%";
 };
 
 const FIELD_LABELS = {
@@ -205,6 +257,22 @@ const showConfig = ref(false);
             </div>
 
             <div
+              v-if="fingerprintConfig.included_worksheets?.length"
+              class="mt-2 d-flex align-center ga-1 flex-wrap"
+            >
+              <v-icon size="small" class="text-medium-emphasis">mdi-table-multiple</v-icon>
+              <span class="text-caption text-medium-emphasis">Hojas:</span>
+              <v-chip
+                v-for="ws in fingerprintConfig.included_worksheets"
+                :key="ws"
+                size="x-small"
+                variant="outlined"
+              >
+                {{ ws }}
+              </v-chip>
+            </div>
+
+            <div
               v-if="fingerprintConfig.source_filename"
               class="text-caption text-medium-emphasis mt-2"
             >
@@ -220,7 +288,7 @@ const showConfig = ref(false);
       :accept="['xlsx', 'xls']"
       :multiple="false"
       accept-label=".xlsx, .xls"
-      :disabled="uploading || loading"
+      :disabled="validating || executing || loading"
       title="Arrastra y suelta un archivo Excel para sincronizar"
       button-text="Seleccionar Archivo"
       class="mb-6"
@@ -274,21 +342,137 @@ const showConfig = ref(false);
       </div>
     </v-list>
 
-    <!-- Upload Dialog -->
-    <v-dialog v-model="uploadDialog" max-width="400" persistent>
+    <!-- Validation Dialog -->
+    <v-dialog v-model="validationDialog" max-width="600" persistent>
       <v-card>
-        <v-card-title>
-          {{ uploading ? "Subiendo archivo..." : "Archivo subido!" }}
-        </v-card-title>
-        <v-card-text class="text-center py-6">
-          <v-progress-circular
-            v-if="uploading"
-            indeterminate
-            color="primary"
-            size="64"
-          />
-          <v-icon v-else icon="mdi-check-circle" color="success" size="64" />
-        </v-card-text>
+        <!-- Validating -->
+        <template v-if="validating">
+          <v-card-title>Validando estructura...</v-card-title>
+          <v-card-text class="text-center py-6">
+            <v-progress-circular indeterminate color="primary" size="64" />
+            <p class="mt-4 text-grey">Analizando el archivo Excel</p>
+          </v-card-text>
+        </template>
+
+        <!-- Executing (auto-enqueue after OK) -->
+        <template v-else-if="executing">
+          <v-card-title>Encolando sincronizacion...</v-card-title>
+          <v-card-text class="text-center py-6">
+            <v-progress-circular indeterminate color="success" size="64" />
+          </v-card-text>
+        </template>
+
+        <!-- Warning -->
+        <template v-else-if="driftResult?.status === 'warning'">
+          <v-card-title class="d-flex align-center ga-2">
+            <v-icon color="warning">mdi-alert</v-icon>
+            Cambio estructural detectado
+          </v-card-title>
+          <v-card-text>
+            <v-alert type="warning" variant="tonal" class="mb-4">
+              {{ driftResult.summary }}
+            </v-alert>
+
+            <div v-if="driftResult.matchedFingerprints?.length" class="mb-3">
+              <div class="text-body-2 font-weight-medium mb-1">
+                Patrones encontrados ({{ driftResult.matchedFingerprints.length }})
+              </div>
+              <v-chip
+                v-for="fp in driftResult.matchedFingerprints"
+                :key="fp.fingerprint"
+                size="small"
+                color="success"
+                variant="tonal"
+                class="mr-1 mb-1"
+              >
+                {{ fp.newOccurrences }} filas ({{ fp.newPercentage }}%)
+              </v-chip>
+            </div>
+
+            <div v-if="driftResult.missingFingerprints?.length" class="mb-3">
+              <div class="text-body-2 font-weight-medium mb-1">
+                Patrones faltantes ({{ driftResult.missingFingerprints.length }})
+              </div>
+              <v-chip
+                v-for="fp in driftResult.missingFingerprints"
+                :key="fp.fingerprint"
+                size="small"
+                color="error"
+                variant="tonal"
+                class="mr-1 mb-1"
+              >
+                {{ fp.fingerprint.substring(0, 20) }}...
+              </v-chip>
+            </div>
+
+            <div v-if="driftResult.newDominantFingerprints?.length" class="mb-3">
+              <div class="text-body-2 font-weight-medium mb-1">
+                Nuevos patrones dominantes ({{ driftResult.newDominantFingerprints.length }})
+              </div>
+              <v-chip
+                v-for="fp in driftResult.newDominantFingerprints"
+                :key="fp.fingerprint"
+                size="small"
+                color="info"
+                variant="tonal"
+                class="mr-1 mb-1"
+              >
+                {{ fp.occurrences }} filas ({{ fp.percentage }}%)
+              </v-chip>
+            </div>
+
+            <div class="text-body-2 text-medium-emphasis">
+              Tasa de coincidencia: {{ formatPercentage(driftResult.matchRate) }}
+            </div>
+          </v-card-text>
+          <v-card-actions>
+            <v-btn @click="cancelUpload">Cancelar</v-btn>
+            <v-spacer />
+            <v-btn color="warning" variant="flat" @click="confirmUpload">
+              Continuar de todas formas
+            </v-btn>
+          </v-card-actions>
+        </template>
+
+        <!-- Critical -->
+        <template v-else-if="driftResult?.status === 'critical'">
+          <v-card-title class="d-flex align-center ga-2">
+            <v-icon color="error">mdi-alert-circle</v-icon>
+            Error estructural
+          </v-card-title>
+          <v-card-text>
+            <v-alert type="error" variant="tonal" class="mb-4">
+              Ningun patron almacenado coincide con este archivo.
+              Requiere reconfiguracion de la fuente.
+            </v-alert>
+
+            <div v-if="driftResult.newDominantFingerprints?.length" class="mb-3">
+              <div class="text-body-2 font-weight-medium mb-1">
+                Patrones encontrados en el archivo
+              </div>
+              <v-chip
+                v-for="fp in driftResult.newDominantFingerprints"
+                :key="fp.fingerprint"
+                size="small"
+                color="info"
+                variant="tonal"
+                class="mr-1 mb-1"
+              >
+                {{ fp.occurrences }} filas ({{ fp.percentage }}%)
+              </v-chip>
+            </div>
+
+            <div class="text-body-2 text-medium-emphasis">
+              {{ driftResult.summary }}
+            </div>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn color="error" variant="flat" @click="cancelUpload">
+              Entendido
+            </v-btn>
+          </v-card-actions>
+        </template>
       </v-card>
     </v-dialog>
   </div>

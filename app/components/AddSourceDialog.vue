@@ -8,6 +8,7 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue", "source-created"]);
 
 const {
+  previewWorksheets,
   analyzeExcelFingerprint,
   classifyFingerprint,
   createFingerprintSource,
@@ -22,11 +23,16 @@ const dialog = computed({
 
 const step = ref(1);
 
-// Step 1: Upload & Analyze (automatic)
+// Step 1: Upload & Analyze
 const selectedFile = ref(null);
 const isAnalyzing = ref(false);
 const analyzeError = ref(null);
 const fingerprintResult = ref(null);
+
+// Step 1 sub: Worksheet selection
+const isPreviewing = ref(false);
+const worksheetPreview = ref(null); // { filepath, worksheets }
+const selectedWorksheets = ref([]); // names of selected worksheets
 
 // Step 2: AI Classification
 const isClassifying = ref(false);
@@ -140,6 +146,9 @@ const resetAll = () => {
   isAnalyzing.value = false;
   analyzeError.value = null;
   fingerprintResult.value = null;
+  isPreviewing.value = false;
+  worksheetPreview.value = null;
+  selectedWorksheets.value = [];
   isClassifying.value = false;
   classifyError.value = null;
   aiClassifications.value = null;
@@ -150,7 +159,7 @@ const resetAll = () => {
   saveError.value = null;
 };
 
-// Auto-analyze on file selection
+// Upload file and preview worksheets
 const onFileChange = async (event) => {
   const files = event?.target?.files || event;
   const file = files?.[0] || files;
@@ -161,16 +170,44 @@ const onFileChange = async (event) => {
   fingerprintResult.value = null;
   aiClassifications.value = null;
   columnMappings.value = {};
+  worksheetPreview.value = null;
+  selectedWorksheets.value = [];
 
-  // Auto-analyze immediately
-  isAnalyzing.value = true;
+  isPreviewing.value = true;
   try {
-    const result = await analyzeExcelFingerprint(file);
+    const result = await previewWorksheets(file);
+    worksheetPreview.value = result;
+    // Select all worksheets by default
+    selectedWorksheets.value = result.worksheets.map((ws) => ws.name);
+
+    // If only 1 worksheet, skip selection and analyze directly
+    if (result.worksheets.length <= 1) {
+      await analyzeSelectedWorksheets();
+    }
+  } catch (err) {
+    analyzeError.value = err.message || "Error al previsualizar el archivo";
+  } finally {
+    isPreviewing.value = false;
+  }
+};
+
+// Analyze fingerprints for selected worksheets only
+const analyzeSelectedWorksheets = async () => {
+  if (!worksheetPreview.value) return;
+
+  isAnalyzing.value = true;
+  analyzeError.value = null;
+
+  try {
+    const result = await analyzeExcelFingerprint(null, {
+      filepath: worksheetPreview.value.filepath,
+      includedWorksheets: selectedWorksheets.value,
+    });
     fingerprintResult.value = result;
 
     // Pre-fill names
     if (!sourceFriendlyName.value) {
-      const name = file.name?.replace(/\.(xlsx|xls)$/i, "") || "";
+      const name = selectedFile.value?.name?.replace(/\.(xlsx|xls)$/i, "") || "";
       sourceFriendlyName.value = `Lista Excel - ${name}`;
     }
     if (!sourceNameInput.value && props.providerName) {
@@ -246,6 +283,7 @@ const saveSource = async () => {
           (fp) => fp.fingerprint,
         ),
         source_filename: selectedFile.value?.name || null,
+        included_worksheets: selectedWorksheets.value.length > 0 ? selectedWorksheets.value : null,
       },
     });
 
@@ -381,9 +419,9 @@ const FIELD_LABELS = {
       >
         <!-- ==================== STEP 1: Upload ==================== -->
         <div v-if="step === 1">
-          <!-- File input that auto-analyzes -->
+          <!-- File input -->
           <div
-            v-if="!isAnalyzing && !fingerprintResult"
+            v-if="!isPreviewing && !worksheetPreview && !isAnalyzing && !fingerprintResult && !analyzeError"
             class="text-center py-8"
           >
             <v-icon
@@ -412,6 +450,105 @@ const FIELD_LABELS = {
               style="display: none"
               @change="onFileChange"
             />
+          </div>
+
+          <!-- Previewing worksheets -->
+          <div v-else-if="isPreviewing" class="text-center py-12">
+            <v-progress-circular
+              indeterminate
+              color="primary"
+              size="56"
+              width="4"
+              class="mb-4"
+            />
+            <div class="text-h6 mb-1">Leyendo hojas...</div>
+            <div class="text-body-2 text-medium-emphasis">
+              {{ selectedFile?.name }}
+            </div>
+          </div>
+
+          <!-- Worksheet selection -->
+          <div v-else-if="worksheetPreview && !isAnalyzing && !fingerprintResult && !analyzeError">
+            <div class="d-flex align-center ga-3 mb-4">
+              <v-icon icon="mdi-file-excel" color="green-darken-2" size="28" />
+              <div>
+                <div class="text-body-1 font-weight-medium">
+                  {{ selectedFile?.name }}
+                </div>
+                <div class="text-body-2 text-medium-emphasis">
+                  {{ worksheetPreview.worksheets.length }} hojas detectadas — selecciona cuales analizar
+                </div>
+              </div>
+              <v-spacer />
+              <v-btn
+                variant="text"
+                size="small"
+                color="primary"
+                @click="worksheetPreview = null; selectedFile = null; selectedWorksheets = []"
+              >
+                Cambiar archivo
+              </v-btn>
+            </div>
+
+            <v-card variant="outlined" class="mb-4">
+              <v-list density="compact" select-strategy="classic">
+                <v-list-item
+                  class="px-3"
+                  @click="
+                    selectedWorksheets.length === worksheetPreview.worksheets.length
+                      ? (selectedWorksheets = [])
+                      : (selectedWorksheets = worksheetPreview.worksheets.map((ws) => ws.name))
+                  "
+                >
+                  <template #prepend>
+                    <v-checkbox-btn
+                      :model-value="selectedWorksheets.length === worksheetPreview.worksheets.length"
+                      :indeterminate="selectedWorksheets.length > 0 && selectedWorksheets.length < worksheetPreview.worksheets.length"
+                      density="compact"
+                    />
+                  </template>
+                  <v-list-item-title class="text-body-2 font-weight-medium">
+                    Seleccionar todas
+                  </v-list-item-title>
+                </v-list-item>
+
+                <v-divider />
+
+                <v-list-item
+                  v-for="ws in worksheetPreview.worksheets"
+                  :key="ws.name"
+                  class="px-3"
+                  @click="
+                    selectedWorksheets.includes(ws.name)
+                      ? (selectedWorksheets = selectedWorksheets.filter((n) => n !== ws.name))
+                      : selectedWorksheets.push(ws.name)
+                  "
+                >
+                  <template #prepend>
+                    <v-checkbox-btn
+                      :model-value="selectedWorksheets.includes(ws.name)"
+                      density="compact"
+                    />
+                  </template>
+                  <v-list-item-title class="text-body-2">
+                    {{ ws.name }}
+                  </v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-card>
+
+            <div class="text-center">
+              <v-btn
+                color="primary"
+                variant="flat"
+                size="large"
+                :disabled="selectedWorksheets.length === 0"
+                @click="analyzeSelectedWorksheets"
+              >
+                <v-icon start>mdi-magnify</v-icon>
+                Analizar {{ selectedWorksheets.length }} hoja(s)
+              </v-btn>
+            </div>
           </div>
 
           <!-- Analyzing state -->
@@ -447,6 +584,8 @@ const FIELD_LABELS = {
                 analyzeError = null;
                 fingerprintResult = null;
                 selectedFile = null;
+                worksheetPreview = null;
+                selectedWorksheets = [];
               "
             >
               Intentar de nuevo
