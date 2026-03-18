@@ -15,8 +15,10 @@ const signOut = async () => {
 const navItems = [
   { title: "Proveedores", icon: "mdi-truck-delivery", to: "/providers" },
   // { title: "Documentación", icon: "mdi-book-open-variant", to: "/docs" },
-  // { title: "Chat IA", icon: "mdi-robot", to: "/chat" },
+  { title: "Chat IA", icon: "mdi-robot", to: "/chat" },
 ];
+
+const isFullBleedPage = computed(() => route.path.startsWith("/chat"));
 
 const currentTab = computed(() => {
   const path = route.path;
@@ -112,7 +114,10 @@ const userInitials = computed(() => {
     </v-app-bar>
 
     <v-main class="main-content">
-      <v-container fluid class="pa-6">
+      <template v-if="isFullBleedPage">
+        <slot />
+      </template>
+      <v-container v-else fluid class="pa-6">
         <slot />
       </v-container>
     </v-main>

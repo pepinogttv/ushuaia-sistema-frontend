@@ -491,6 +491,99 @@ export function useExternalBackend() {
     );
   };
 
+  // ==================== CHAT ====================
+
+  const chatGetConversations = async () => {
+    return await request("/api/chat/conversations", { method: "GET" }, true);
+  };
+
+  const chatCreateConversation = async (title) => {
+    return await request(
+      "/api/chat/conversations",
+      {
+        method: "POST",
+        body: JSON.stringify({ title }),
+      },
+      true,
+    );
+  };
+
+  const chatGetMessages = async (conversationId) => {
+    return await request(
+      `/api/chat/conversations/${conversationId}/messages`,
+      { method: "GET" },
+      true,
+    );
+  };
+
+  const chatDeleteConversation = async (id) => {
+    return await request(
+      `/api/chat/conversations/${id}`,
+      { method: "DELETE" },
+      true,
+    );
+  };
+
+  /**
+   * Envia un mensaje al chat y lee el stream SSE de respuesta
+   * @param {string} conversationId - UUID de la conversacion
+   * @param {string} message - Mensaje del usuario
+   * @param {Function} onChunk - Callback llamado con cada chunk de texto { content }
+   */
+  const chatSendMessage = async (conversationId, message, onChunk) => {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await client.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      throw new Error("No se pudo obtener el token de autenticacion");
+    }
+
+    const response = await fetch(
+      `${baseUrl}/api/chat/conversations/${conversationId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ message }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6);
+        if (data === "[DONE]") return;
+
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.error) throw new Error(parsed.error);
+          if (parsed.content || parsed.title) onChunk(parsed);
+        } catch (e) {
+          if (e.message !== "Unexpected end of JSON input") throw e;
+        }
+      }
+    }
+  };
+
   return {
     // Método genérico
     request,
@@ -514,6 +607,13 @@ export function useExternalBackend() {
 
     // Source priority
     updateSourcePriority,
+
+    // Chat
+    chatGetConversations,
+    chatCreateConversation,
+    chatGetMessages,
+    chatDeleteConversation,
+    chatSendMessage,
 
     // Propiedades útiles
     baseUrl,
