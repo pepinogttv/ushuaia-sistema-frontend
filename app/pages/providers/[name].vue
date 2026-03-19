@@ -2,7 +2,7 @@
 const client = useSupabaseClient();
 const route = useRoute();
 const router = useRouter();
-const { updateSourcePriority } = useExternalBackend();
+const { updateSourcePriority, deleteSource } = useExternalBackend();
 
 const providerName = computed(() => route.params.name);
 const providerId = computed(() => route.query.id);
@@ -27,6 +27,42 @@ const showConfigDialog = ref(false);
  
 // Add source dialog
 const showAddSourceDialog = ref(false);
+
+// Delete source
+const deleteSourceDialog = ref(false);
+const sourceToDelete = ref(null);
+const deletingSource = ref(false);
+const deleteSourceError = ref(null);
+
+const openDeleteSourceDialog = (source) => {
+  sourceToDelete.value = source;
+  deleteSourceError.value = null;
+  deleteSourceDialog.value = true;
+};
+
+const handleDeleteSource = async () => {
+  try {
+    deletingSource.value = true;
+    deleteSourceError.value = null;
+    await deleteSource(sourceToDelete.value.id);
+    if (selectedSource.value?.id === sourceToDelete.value.id) {
+      selectedSource.value = null;
+    }
+    await fetchProviderSources();
+    deleteSourceDialog.value = false;
+    sourceToDelete.value = null;
+  } catch (err) {
+    deleteSourceError.value = err.message;
+  } finally {
+    deletingSource.value = false;
+  }
+};
+
+const closeDeleteSourceDialog = () => {
+  deleteSourceDialog.value = false;
+  sourceToDelete.value = null;
+  deleteSourceError.value = null;
+};
 
 const selectSource = (source) => {
   selectedSource.value = source;
@@ -371,6 +407,14 @@ onMounted(() => {
                       Indica si los precios de esta fuente ya incluyen IVA. Si se activa, el sistema descontara el IVA automaticamente al mergear los productos.
                     </v-tooltip>
                     <v-btn
+                      icon="mdi-delete-outline"
+                      variant="text"
+                      size="small"
+                      color="error"
+                      class="delete-source-btn"
+                      @click="openDeleteSourceDialog(selectedSource)"
+                    />
+                    <v-btn
                       icon="mdi-reload"
                       variant="text"
                       size="small"
@@ -433,6 +477,31 @@ onMounted(() => {
         </v-tabs-window-item>
       </v-tabs-window>
     </div>
+
+    <!-- Delete Source Dialog -->
+    <v-dialog v-model="deleteSourceDialog" max-width="500">
+      <v-card>
+        <v-card-title class="text-h6">
+          Confirmar eliminación de fuente
+        </v-card-title>
+        <v-card-text>
+          <p>¿Estás seguro que querés eliminar la fuente <strong>{{ sourceToDelete?.friendly_name || sourceToDelete?.name }}</strong>?</p>
+          <p class="text-caption text-grey mt-2">Solo se pueden eliminar fuentes sin sincronizaciones.</p>
+          <v-alert v-if="deleteSourceError" type="error" variant="tonal" density="compact" class="mt-3">
+            {{ deleteSourceError }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="grey" variant="text" @click="closeDeleteSourceDialog" :disabled="deletingSource">
+            Cancelar
+          </v-btn>
+          <v-btn color="error" variant="flat" @click="handleDeleteSource" :loading="deletingSource">
+            Eliminar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -608,6 +677,15 @@ onMounted(() => {
 .reload-btn:hover {
   color: #667eea !important;
   background: rgba(102, 126, 234, 0.08) !important;
+}
+
+.delete-source-btn {
+  color: #ef4444 !important;
+  border-radius: 8px !important;
+}
+
+.delete-source-btn:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
 }
 
 .info-icon {

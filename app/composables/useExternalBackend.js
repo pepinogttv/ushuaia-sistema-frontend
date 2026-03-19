@@ -228,6 +228,34 @@ export function useExternalBackend() {
     );
   };
 
+  const deleteProvider = async (providerId) => {
+    if (!providerId) {
+      throw new Error("providerId es requerido");
+    }
+
+    return await request(
+      `/api/providers/${providerId}`,
+      {
+        method: "DELETE",
+      },
+      true,
+    );
+  };
+
+  const deleteSource = async (sourceId) => {
+    if (!sourceId) {
+      throw new Error("sourceId es requerido");
+    }
+
+    return await request(
+      `/api/sources/${sourceId}`,
+      {
+        method: "DELETE",
+      },
+      true,
+    );
+  };
+
   /**
    * Consulta el estado de un job de rollback en BullMQ
    * @param {string|number} jobId - ID del job de BullMQ
@@ -592,9 +620,11 @@ export function useExternalBackend() {
     sourceUploadFile,
     sourceListFiles,
     sourceDeleteFile,
+    deleteSource,
     executeSource,
     cancelSourceExecution,
     deleteProviderSourceLog,
+    deleteProvider,
     getRollbackJobStatus,
     analyzeExcelFingerprint,
 

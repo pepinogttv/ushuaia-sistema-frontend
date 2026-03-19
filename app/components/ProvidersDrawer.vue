@@ -9,6 +9,42 @@ const error = ref(null);
 const drawer = ref(true);
 const searchQuery = ref("");
 
+const { deleteProvider } = useExternalBackend();
+const deleteDialog = ref(false);
+const providerToDelete = ref(null);
+const deleting = ref(false);
+const deleteError = ref(null);
+
+const openDeleteDialog = (provider) => {
+  providerToDelete.value = provider;
+  deleteError.value = null;
+  deleteDialog.value = true;
+};
+
+const handleDeleteProvider = async () => {
+  try {
+    deleting.value = true;
+    deleteError.value = null;
+    await deleteProvider(providerToDelete.value.id);
+    await fetchProviders();
+    if (selectedProviderId.value === providerToDelete.value.id) {
+      navigateTo("/providers");
+    }
+    deleteDialog.value = false;
+    providerToDelete.value = null;
+  } catch (err) {
+    deleteError.value = err.message;
+  } finally {
+    deleting.value = false;
+  }
+};
+
+const closeDeleteDialog = () => {
+  deleteDialog.value = false;
+  providerToDelete.value = null;
+  deleteError.value = null;
+};
+
 const filteredProviders = computed(() => {
   if (!searchQuery.value.trim()) {
     return providers.value;
@@ -135,6 +171,14 @@ onMounted(() => {
           </v-list-item-title>
 
           <template #append>
+            <v-btn
+              icon="mdi-delete-outline"
+              variant="text"
+              size="x-small"
+              color="error"
+              class="provider-delete"
+              @click.stop="openDeleteDialog(provider)"
+            />
             <v-icon
               v-if="isSelected(provider)"
               size="20"
@@ -166,6 +210,31 @@ onMounted(() => {
 
     <!-- Add Provider Dialog -->
     <AddProviderDialog v-model="showAddProviderDialog" />
+
+    <!-- Delete Provider Dialog -->
+    <v-dialog v-model="deleteDialog" max-width="500">
+      <v-card>
+        <v-card-title class="text-h6">
+          Confirmar eliminación
+        </v-card-title>
+        <v-card-text>
+          <p>¿Estás seguro que querés eliminar el proveedor <strong>{{ providerToDelete?.name }}</strong>?</p>
+          <p class="text-caption text-grey mt-2">Esta acción no se puede deshacer.</p>
+          <v-alert v-if="deleteError" type="error" variant="tonal" density="compact" class="mt-3">
+            {{ deleteError }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="grey" variant="text" @click="closeDeleteDialog" :disabled="deleting">
+            Cancelar
+          </v-btn>
+          <v-btn color="error" variant="flat" @click="handleDeleteProvider" :loading="deleting">
+            Eliminar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-navigation-drawer>
 </template>
 
@@ -252,6 +321,15 @@ onMounted(() => {
 }
 
 .provider-item:hover .provider-arrow {
+  opacity: 1;
+}
+
+.provider-delete {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.provider-item:hover .provider-delete {
   opacity: 1;
 }
 
