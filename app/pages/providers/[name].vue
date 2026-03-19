@@ -407,6 +407,7 @@ onMounted(() => {
                       Indica si los precios de esta fuente ya incluyen IVA. Si se activa, el sistema descontara el IVA automaticamente al mergear los productos.
                     </v-tooltip>
                     <v-btn
+                      v-if="selectedSource.type === 'fingerprint-source'"
                       icon="mdi-delete-outline"
                       variant="text"
                       size="small"
