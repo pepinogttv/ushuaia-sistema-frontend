@@ -60,7 +60,7 @@ async function loadConversations() {
   loadingConversations.value = true;
   try {
     const result = await chatGetConversations();
-    conversations.value = result;
+    conversations.value = Array.isArray(result) ? result : [];
   } catch (e) {
     console.error("[Chat] Error cargando conversaciones:", e);
   } finally {
@@ -71,6 +71,7 @@ async function loadConversations() {
 async function createConversation() {
   try {
     const conv = await chatCreateConversation();
+    if (!conv?.id) return;
     conversations.value.unshift(conv);
     selectConversation(conv.id);
   } catch (e) {

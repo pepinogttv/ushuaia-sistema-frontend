@@ -284,6 +284,7 @@ const saveSource = async () => {
         ),
         source_filename: selectedFile.value?.name || null,
         included_worksheets: selectedWorksheets.value.length > 0 ? selectedWorksheets.value : null,
+        enrichment_rules: fingerprintResult.value?.enrichment_rules || [],
       },
     });
 
@@ -305,29 +306,7 @@ const prevStep = () => {
 
 // ==================== HELPERS ====================
 
-const getTypeColor = (type) =>
-  ({
-    string: "blue",
-    number: "green",
-    price: "purple",
-    date: "orange",
-    boolean: "teal",
-    email: "indigo",
-    link: "cyan",
-    empty: "grey",
-  })[type] || "grey";
-
-const getTypeLabel = (type) =>
-  ({
-    string: "Texto",
-    number: "Num",
-    price: "Precio",
-    date: "Fecha",
-    boolean: "Bool",
-    email: "Email",
-    link: "Link",
-    empty: "Vacio",
-  })[type] || type;
+const { getTypeColor, getTypeLabel, parseFingerprint } = useFingerprintHelpers();
 
 const getTipoColor = (tipo) =>
   ({
@@ -353,8 +332,6 @@ const getTipoIcon = (tipo) =>
 
 const getConfianzaColor = (c) =>
   ({ alta: "success", media: "warning", baja: "error" })[c] || "grey";
-
-const parseFingerprint = (fp) => fp.split("|");
 
 const FIELD_LABELS = {
   provider_product_id: "Codigo",
@@ -644,6 +621,60 @@ const FIELD_LABELS = {
                 </v-card>
               </v-col>
             </v-row>
+
+            <!-- Fingerprint patterns with examples -->
+            <div class="mt-5">
+              <div class="text-body-2 font-weight-medium mb-3">
+                Patrones detectados
+              </div>
+              <div class="d-flex flex-column ga-2">
+                <v-card
+                  v-for="(fp, index) in fingerprintResult.fingerprints"
+                  :key="index"
+                  variant="outlined"
+                  density="compact"
+                >
+                  <v-card-text class="pa-3">
+                    <div class="d-flex align-center ga-2 flex-wrap mb-2">
+                      <span class="text-body-2 font-weight-medium">
+                        {{ fp.occurrences.toLocaleString() }} filas
+                      </span>
+                      <span class="text-caption text-medium-emphasis">
+                        ({{ fp.percentage }}%)
+                      </span>
+                      <v-spacer />
+                      <div class="d-flex ga-1 flex-wrap">
+                        <v-chip
+                          v-for="(type, ti) in parseFingerprint(fp.fingerprint).slice(0, 8)"
+                          :key="ti"
+                          :color="getTypeColor(type)"
+                          size="x-small"
+                          variant="tonal"
+                        >
+                          {{ getTypeLabel(type) }}
+                        </v-chip>
+                        <v-chip
+                          v-if="parseFingerprint(fp.fingerprint).length > 8"
+                          size="x-small"
+                          variant="tonal"
+                        >
+                          +{{ parseFingerprint(fp.fingerprint).length - 8 }}
+                        </v-chip>
+                      </div>
+                    </div>
+                    <!-- Example rows -->
+                    <div
+                      v-for="(ex, ei) in fp.examples"
+                      :key="ei"
+                      class="text-caption text-medium-emphasis"
+                      style="font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                    >
+                      {{ ex.preview }}
+                    </div>
+                  </v-card-text>
+                </v-card>
+              </div>
+            </div>
           </div>
         </div>
 

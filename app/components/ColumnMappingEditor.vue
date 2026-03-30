@@ -151,33 +151,7 @@ const validation = computed(() => {
 });
 
 // Type display helpers
-const getTypeColor = (type) => {
-  const colors = {
-    string: "blue",
-    number: "green",
-    price: "purple",
-    date: "orange",
-    boolean: "teal",
-    email: "indigo",
-    link: "cyan",
-    empty: "grey",
-  };
-  return colors[type] || "grey";
-};
-
-const getTypeLabel = (type) => {
-  const labels = {
-    string: "Texto",
-    number: "Numero",
-    price: "Precio",
-    date: "Fecha",
-    boolean: "Si/No",
-    email: "Email",
-    link: "Enlace",
-    empty: "Vacio",
-  };
-  return labels[type] || type;
-};
+const { getTypeColor, getTypeLabel } = useFingerprintHelpers();
 
 // Expose validation for parent
 defineExpose({ validation });

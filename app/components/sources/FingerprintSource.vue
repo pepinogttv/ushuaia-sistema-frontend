@@ -189,6 +189,10 @@ const FIELD_COLORS = {
 
 // Show/hide config details
 const showConfig = ref(false);
+
+const hasEnrichmentRules = computed(() => {
+  return fingerprintConfig.value?.enrichment_rules?.length > 0;
+});
 </script>
 
 <template>
@@ -223,6 +227,10 @@ const showConfig = ref(false);
             <v-chip size="x-small" variant="flat">
               {{ fingerprintConfig.product_fingerprints?.length || 0 }}
               patron(es) de producto
+            </v-chip>
+            <v-chip v-if="hasEnrichmentRules" size="x-small" color="amber" variant="flat" class="font-weight-bold">
+              <v-icon start size="x-small">mdi-auto-fix</v-icon>
+              enriched
             </v-chip>
           </div>
           <v-btn
@@ -270,6 +278,26 @@ const showConfig = ref(false);
               >
                 {{ ws }}
               </v-chip>
+            </div>
+
+            <div
+              v-if="hasEnrichmentRules"
+              class="mt-2 d-flex align-center ga-1 flex-wrap"
+            >
+              <v-icon size="small" class="text-medium-emphasis">mdi-auto-fix</v-icon>
+              <span class="text-caption text-medium-emphasis">Enrichment:</span>
+              <template v-for="(rule, rIdx) in fingerprintConfig.enrichment_rules" :key="rIdx">
+                <span class="text-caption text-medium-emphasis">Columna {{ rule.column + 1 }} →</span>
+                <v-chip
+                  v-for="(val, vIdx) in rule.values"
+                  :key="`${rIdx}-${vIdx}`"
+                  size="x-small"
+                  variant="outlined"
+                  color="amber-darken-2"
+                >
+                  {{ val }}
+                </v-chip>
+              </template>
             </div>
 
             <div
