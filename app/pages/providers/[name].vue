@@ -2,7 +2,7 @@
 const client = useSupabaseClient();
 const route = useRoute();
 const router = useRouter();
-const { updateSourcePriority, deleteSource } = useExternalBackend();
+const { updateSourcePriority, updateSourceArchived, deleteSource } = useExternalBackend();
 
 const providerName = computed(() => route.params.name);
 const providerId = computed(() => route.query.id);
@@ -11,6 +11,18 @@ const providerSources = ref([]);
 const pending = ref(true);
 const error = ref(null);
 const prioritySaving = ref(false);
+const archiveSaving = ref(false);
+
+// Archive filter: 'activas' or 'archivadas'
+const archiveFilter = ref('activas');
+
+// Filtered sources based on archive toggle
+const filteredSources = computed(() => {
+  return providerSources.value.filter((source) => {
+    if (archiveFilter.value === 'archivadas') return source.archived === true;
+    return !source.archived;
+  });
+});
 
 // Main tab synced with URL
 const mainTab = ref(route.query.tab || "fuentes");
@@ -113,6 +125,26 @@ const saveIvaIncluded = async (source, newValue) => {
   }
 };
 
+const toggleArchived = async (source) => {
+  const newValue = !source.archived;
+  try {
+    archiveSaving.value = true;
+    await updateSourceArchived(source.id, newValue);
+    source.archived = newValue;
+    // If the archived source is currently selected and no longer visible, deselect it
+    if (selectedSource.value?.id === source.id) {
+      const stillVisible = filteredSources.value.some((s) => s.id === source.id);
+      if (!stillVisible) {
+        selectedSource.value = filteredSources.value.length > 0 ? filteredSources.value[0] : null;
+      }
+    }
+  } catch (err) {
+    console.error("Error actualizando archivado:", err);
+  } finally {
+    archiveSaving.value = false;
+  }
+};
+
 const fetchProviderSources = async () => {
   if (!providerId.value) {
     pending.value = false;
@@ -125,7 +157,7 @@ const fetchProviderSources = async () => {
 
     const { data, error: fetchError } = await client
       .from("provider_sources")
-      .select("id, name, type, friendly_name, priority, iva_included")
+      .select("id, name, type, friendly_name, priority, iva_included, archived")
       .eq("provider_id", providerId.value)
       .order("priority", { ascending: true });
 
@@ -135,9 +167,12 @@ const fetchProviderSources = async () => {
 
     providerSources.value = data || [];
 
-    // Auto-select first source
+    // Auto-select first visible source
     if (data && data.length > 0 && !selectedSource.value) {
-      selectedSource.value = data[0];
+      const visible = filteredSources.value;
+      if (visible.length > 0) {
+        selectedSource.value = visible[0];
+      }
     }
   } catch (err) {
     error.value = err;
@@ -231,6 +266,26 @@ onMounted(() => {
           <v-row no-gutters class="fill-height overflow-hidden">
             <!-- Left: Sources List Menu -->
             <v-col cols="3" class="sources-panel d-flex flex-column overflow-hidden">
+              <!-- Archive Filter -->
+              <div class="archive-filter-bar">
+                <v-btn-toggle
+                  v-model="archiveFilter"
+                  mandatory
+                  density="compact"
+                  variant="outlined"
+                  divided
+                  class="archive-toggle"
+                >
+                  <v-btn value="activas" size="x-small">
+                    Activas
+                  </v-btn>
+                  <v-btn value="archivadas" size="x-small">
+                    <v-icon size="14" start>mdi-archive-outline</v-icon>
+                    Archivadas
+                  </v-btn>
+                </v-btn-toggle>
+              </div>
+
               <!-- Loading -->
               <div v-if="pending" class="text-center pa-6">
                 <v-progress-circular indeterminate color="primary" size="28" width="3" />
@@ -248,15 +303,17 @@ onMounted(() => {
 
               <!-- Empty -->
               <div
-                v-else-if="providerSources.length === 0"
+                v-else-if="filteredSources.length === 0"
                 class="empty-sources"
               >
                 <v-icon
-                  icon="mdi-database-off"
+                  :icon="archiveFilter === 'archivadas' ? 'mdi-archive-off-outline' : 'mdi-database-off'"
                   size="40"
                   color="grey-lighten-1"
                 />
-                <p class="text-grey text-body-2 mt-2">Sin fuentes</p>
+                <p class="text-grey text-body-2 mt-2">
+                  {{ archiveFilter === 'archivadas' ? 'Sin fuentes archivadas' : 'Sin fuentes' }}
+                </p>
               </div>
 
               <!-- Sources List -->
@@ -266,57 +323,87 @@ onMounted(() => {
                 nav
                 class="sources-list flex-grow-1 overflow-y-auto"
               >
-                <v-list-item
-                  v-for="source in providerSources"
+                <v-menu
+                  v-for="source in filteredSources"
                   :key="source.id"
-                  :class="['source-item', { 'source-item--active': selectedSource?.id === source.id }]"
-                  :active="selectedSource?.id === source.id"
-                  @click="selectSource(source)"
-                  rounded="lg"
+                  location="end"
+                  :close-on-content-click="true"
                 >
-                  <template #prepend>
-                    <v-avatar
-                      size="34"
-                      :class="['source-avatar', { 'source-avatar--active': selectedSource?.id === source.id }]"
+                  <template #activator="{ props: contextMenuProps }">
+                    <v-list-item
+                      :class="[
+                        'source-item',
+                        { 'source-item--active': selectedSource?.id === source.id },
+                        { 'source-item--archived': source.archived },
+                      ]"
+                      :active="selectedSource?.id === source.id"
+                      @click="selectSource(source)"
+                      @contextmenu.prevent="contextMenuProps.onClick"
+                      rounded="lg"
                     >
-                      <v-icon
-                        :icon="
-                          source.type === 'file-source'
-                            ? 'mdi-file-document'
-                            : source.type === 'fingerprint-source'
-                              ? 'mdi-fingerprint'
-                              : 'mdi-web'
-                        "
-                        size="18"
-                        color="white"
-                      />
-                    </v-avatar>
-                  </template>
+                      <template #prepend>
+                        <v-avatar
+                          size="34"
+                          :class="['source-avatar', { 'source-avatar--active': selectedSource?.id === source.id }]"
+                        >
+                          <v-icon
+                            :icon="
+                              source.type === 'file-source'
+                                ? 'mdi-file-document'
+                                : source.type === 'fingerprint-source'
+                                  ? 'mdi-fingerprint'
+                                  : 'mdi-web'
+                            "
+                            size="18"
+                            color="white"
+                          />
+                        </v-avatar>
+                      </template>
 
-                  <v-list-item-title class="source-name">
-                    {{ source.friendly_name || source.name }}
-                  </v-list-item-title>
-                  <v-list-item-subtitle class="source-type d-flex align-center ga-1">
-                    <span>{{ source.type }}</span>
-                    <v-chip
-                      size="x-small"
-                      variant="elevated"
-                      class="priority-chip"
-                      :color="source.priority <= 1 ? 'amber-darken-2' : 'blue-grey-lighten-1'"
+                      <v-list-item-title class="source-name">
+                        {{ source.friendly_name || source.name }}
+                      </v-list-item-title>
+                      <v-list-item-subtitle class="source-type d-flex align-center ga-1">
+                        <span>{{ source.type }}</span>
+                        <v-chip
+                          size="x-small"
+                          variant="elevated"
+                          class="priority-chip"
+                          :color="source.priority <= 1 ? 'amber-darken-2' : 'blue-grey-lighten-1'"
+                        >
+                          #{{ source.priority }}
+                        </v-chip>
+                        <v-chip
+                          v-if="source.iva_included"
+                          size="x-small"
+                          variant="tonal"
+                          color="green"
+                          class="ml-1"
+                        >
+                          IVA inc.
+                        </v-chip>
+                        <v-chip
+                          v-if="source.archived"
+                          size="x-small"
+                          variant="tonal"
+                          color="grey"
+                          class="ml-1"
+                        >
+                          <v-icon size="12" start>mdi-archive-outline</v-icon>
+                          Archivada
+                        </v-chip>
+                      </v-list-item-subtitle>
+                    </v-list-item>
+                  </template>
+                  <v-list density="compact" class="context-menu-list">
+                    <v-list-item
+                      :prepend-icon="source.archived ? 'mdi-archive-arrow-up-outline' : 'mdi-archive-arrow-down-outline'"
+                      @click="toggleArchived(source)"
                     >
-                      #{{ source.priority }}
-                    </v-chip>
-                    <v-chip
-                      v-if="source.iva_included"
-                      size="x-small"
-                      variant="tonal"
-                      color="green"
-                      class="ml-1"
-                    >
-                      IVA inc.
-                    </v-chip>
-                  </v-list-item-subtitle>
-                </v-list-item>
+                      <v-list-item-title>{{ source.archived ? 'Desarchivar' : 'Archivar' }}</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </v-menu>
               </v-list>
             </v-col>
 
@@ -358,63 +445,96 @@ onMounted(() => {
                       </span>
                     </div>
                   </div>
-                  <div class="d-flex align-center ga-2">
-                    <v-text-field
-                      :model-value="selectedSource.priority"
-                      @update:model-value="savePriority(selectedSource, $event)"
-                      type="number"
-                      min="1"
-                      label="Prioridad"
-                      variant="outlined"
-                      density="compact"
-                      hide-details
-                      :loading="prioritySaving"
-                      style="max-width: 100px"
-                      hint="1 = máxima"
-                    />
-                    <v-tooltip location="bottom" max-width="300">
-                      <template #activator="{ props: tooltipProps }">
-                        <v-icon
-                          v-bind="tooltipProps"
-                          icon="mdi-information-outline"
-                          size="20"
-                          color="grey"
-                          class="info-icon"
+                  <div class="d-flex align-center ga-1">
+                    <v-menu :close-on-content-click="false" location="bottom end">
+                      <template #activator="{ props: menuProps }">
+                        <v-btn
+                          v-bind="menuProps"
+                          icon="mdi-cog-outline"
+                          variant="text"
+                          size="small"
                         />
                       </template>
-                      La prioridad define qué fuente gana cuando varias tienen el mismo producto. Menor número = mayor prioridad (1 es la máxima). Si dos fuentes tienen la misma prioridad, gana la que se ejecutó más recientemente.
-                    </v-tooltip>
-                    <v-checkbox
-                      :model-value="selectedSource.iva_included || false"
-                      @update:model-value="saveIvaIncluded(selectedSource, $event)"
-                      label="IVA incluido"
-                      density="compact"
-                      hide-details
-                      :loading="ivaIncludedSaving"
-                      class="ml-2"
-                      style="max-width: 160px"
-                    />
-                    <v-tooltip location="bottom" max-width="300">
-                      <template #activator="{ props: ivaTooltipProps }">
-                        <v-icon
-                          v-bind="ivaTooltipProps"
-                          icon="mdi-information-outline"
-                          size="20"
-                          color="grey"
-                          class="info-icon"
-                        />
-                      </template>
-                      Indica si los precios de esta fuente ya incluyen IVA. Si se activa, el sistema descontara el IVA automaticamente al mergear los productos.
-                    </v-tooltip>
-                    <v-btn
-                      v-if="selectedSource.type === 'fingerprint-source'"
-                      icon="mdi-delete-outline"
-                      variant="text"
-                      size="small"
-                      color="error"
-                      class="delete-source-btn"
-                      @click="openDeleteSourceDialog(selectedSource)"
-                    />
+                      <v-card min-width="280">
+                        <v-card-text class="pa-4 d-flex flex-column ga-4">
+                          <div>
+                            <div class="text-caption text-medium-emphasis mb-1">
+                              Prioridad
+                              <v-tooltip location="bottom" max-width="300">
+                                <template #activator="{ props: tooltipProps }">
+                                  <v-icon
+                                    v-bind="tooltipProps"
+                                    icon="mdi-information-outline"
+                                    size="14"
+                                    color="grey"
+                                  />
+                                </template>
+                                Menor numero = mayor prioridad (1 es la maxima). Si dos fuentes tienen la misma prioridad, gana la que se ejecuto mas recientemente.
+                              </v-tooltip>
+                            </div>
+                            <v-text-field
+                              :model-value="selectedSource.priority"
+                              @update:model-value="savePriority(selectedSource, $event)"
+                              type="number"
+                              min="1"
+                              variant="outlined"
+                              density="compact"
+                              hide-details
+                              :loading="prioritySaving"
+                              style="max-width: 100px"
+                            />
+                          </div>
+                          <div>
+                            <v-checkbox
+                              :model-value="selectedSource.iva_included || false"
+                              @update:model-value="saveIvaIncluded(selectedSource, $event)"
+                              density="compact"
+                              hide-details
+                              :loading="ivaIncludedSaving"
+                            >
+                              <template #label>
+                                <span class="text-body-2">
+                                  IVA incluido
+                                  <v-tooltip location="bottom" max-width="300">
+                                    <template #activator="{ props: ivaTooltipProps }">
+                                      <v-icon
+                                        v-bind="ivaTooltipProps"
+                                        icon="mdi-information-outline"
+                                        size="14"
+                                        color="grey"
+                                      />
+                                    </template>
+                                    Si se activa, el sistema descontara el IVA automaticamente al mergear los productos.
+                                  </v-tooltip>
+                                </span>
+                              </template>
+                            </v-checkbox>
+                          </div>
+                          <v-divider />
+                          <v-btn
+                            variant="text"
+                            :color="selectedSource.archived ? 'success' : 'warning'"
+                            size="small"
+                            :prepend-icon="selectedSource.archived ? 'mdi-archive-arrow-up-outline' : 'mdi-archive-arrow-down-outline'"
+                            :loading="archiveSaving"
+                            @click="toggleArchived(selectedSource)"
+                          >
+                            {{ selectedSource.archived ? 'Desarchivar' : 'Archivar' }}
+                          </v-btn>
+                          <v-divider v-if="selectedSource.type === 'fingerprint-source'" />
+                          <v-btn
+                            v-if="selectedSource.type === 'fingerprint-source'"
+                            variant="text"
+                            color="error"
+                            size="small"
+                            prepend-icon="mdi-delete-outline"
+                            @click="openDeleteSourceDialog(selectedSource)"
+                          >
+                            Eliminar fuente
+                          </v-btn>
+                        </v-card-text>
+                      </v-card>
+                    </v-menu>
                     <v-btn
                       icon="mdi-reload"
                       variant="text"
@@ -689,6 +809,34 @@ onMounted(() => {
   background: rgba(239, 68, 68, 0.08) !important;
 }
 
+/* Archive filter bar */
+.archive-filter-bar {
+  padding: 10px 12px 6px 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.archive-toggle {
+  border-radius: 8px !important;
+  height: 28px !important;
+}
+
+.archive-toggle .v-btn {
+  text-transform: none !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.2px !important;
+}
+
+/* Archived source item */
+.source-item--archived {
+  opacity: 0.55;
+}
+
+.source-item--archived:hover {
+  opacity: 0.8;
+}
+
 .info-icon {
   cursor: help;
   opacity: 0.6;
@@ -697,5 +845,11 @@ onMounted(() => {
 
 .info-icon:hover {
   opacity: 1;
+}
+
+/* Context menu */
+.context-menu-list {
+  min-width: 180px;
+  border-radius: 8px !important;
 }
 </style>

@@ -627,6 +627,9 @@ const FIELD_LABELS = {
               <div class="text-body-2 font-weight-medium mb-3">
                 Patrones detectados
               </div>
+              <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+                Estos son los ejemplos que la IA usara en el siguiente paso para clasificar cada patron y mapear las columnas.
+              </v-alert>
               <div class="d-flex flex-column ga-2">
                 <v-card
                   v-for="(fp, index) in fingerprintResult.fingerprints"
@@ -663,13 +666,29 @@ const FIELD_LABELS = {
                       </div>
                     </div>
                     <!-- Example rows -->
-                    <div
-                      v-for="(ex, ei) in fp.examples"
-                      :key="ei"
-                      class="text-caption text-medium-emphasis"
-                      style="font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
-                    >
-                      {{ ex.preview }}
+                    <div v-if="fp.examples?.length" class="examples-scroll-container mt-1">
+                      <table class="examples-table">
+                        <thead>
+                          <tr>
+                            <th
+                              v-for="(type, ti) in parseFingerprint(fp.fingerprint)"
+                              :key="ti"
+                            >
+                              {{ ti }}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(ex, ei) in fp.examples" :key="ei">
+                            <td
+                              v-for="(val, vi) in ex.values.slice(0, parseFingerprint(fp.fingerprint).length)"
+                              :key="vi"
+                            >
+                              {{ val }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   </v-card-text>
                 </v-card>
@@ -1109,5 +1128,41 @@ const FIELD_LABELS = {
 
 .border-primary {
   border-color: rgb(var(--v-theme-primary)) !important;
+}
+
+.examples-scroll-container {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.examples-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.examples-table thead {
+  background-color: #e0e0e0;
+}
+
+.examples-table th,
+.examples-table td {
+  padding: 4px 8px;
+  border: 1px solid #bdbdbd;
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.examples-table th {
+  font-weight: 600;
+  color: #616161;
+}
+
+.examples-table td {
+  color: #424242;
 }
 </style>

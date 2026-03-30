@@ -519,6 +519,25 @@ export function useExternalBackend() {
     );
   };
 
+  /**
+   * Actualiza el estado de archivado de un source
+   * @param {string} sourceId - UUID del source
+   * @param {boolean} archived - Si el source está archivado
+   * @returns {Promise<object>} - Source actualizado
+   */
+  const updateSourceArchived = async (sourceId, archived) => {
+    if (!sourceId) throw new Error("sourceId es requerido");
+
+    return await request(
+      `/api/sources/${sourceId}/archived`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ archived }),
+      },
+      true,
+    );
+  };
+
   // ==================== CHAT ====================
 
   const chatGetConversations = async () => {
@@ -635,8 +654,9 @@ export function useExternalBackend() {
     validateFingerprintUpload,
     executeSourceWithFile,
 
-    // Source priority
+    // Source priority & archive
     updateSourcePriority,
+    updateSourceArchived,
 
     // Chat
     chatGetConversations,
