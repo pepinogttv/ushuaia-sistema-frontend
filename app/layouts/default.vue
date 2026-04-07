@@ -15,6 +15,7 @@ const signOut = async () => {
 const navItems = [
   { title: "Proveedores", icon: "mdi-truck-delivery", to: "/providers" },
   // { title: "Documentación", icon: "mdi-book-open-variant", to: "/docs" },
+  { title: "Fichadas", icon: "mdi-clock-check-outline", to: "/fichadas" },
   { title: "Chat IA", icon: "mdi-robot", to: "/chat" },
 ];
 
@@ -24,6 +25,7 @@ const currentTab = computed(() => {
   const path = route.path;
   if (path.startsWith("/providers")) return "/providers";
   if (path.startsWith("/docs")) return "/docs";
+  if (path.startsWith("/fichadas")) return "/fichadas";
   if (path.startsWith("/chat")) return "/chat";
   return "/providers";
 });
