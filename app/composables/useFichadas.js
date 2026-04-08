@@ -46,7 +46,7 @@ export function useFichadas() {
   /**
    * Procesa las fichadas con filtros y devuelve datos para preview.
    */
-  async function processFichadas({ filePath, fechaDesde, fechaHasta, legajos, feriados, vacaciones }) {
+  async function processFichadas({ filePath, fechaDesde, fechaHasta, legajos, feriados, vacaciones, medioDiaMinutos }) {
     const authHeaders = await getAuthHeaders();
 
     const response = await fetch(`${baseUrl}/api/fichadas/process`, {
@@ -55,7 +55,7 @@ export function useFichadas() {
         ...authHeaders,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ filePath, fechaDesde, fechaHasta, legajos, feriados, vacaciones }),
+      body: JSON.stringify({ filePath, fechaDesde, fechaHasta, legajos, feriados, vacaciones, medioDiaMinutos }),
     });
 
     const data = await response.json();
@@ -69,7 +69,7 @@ export function useFichadas() {
   /**
    * Descarga el Excel generado.
    */
-  async function downloadExcel({ filePath, fechaDesde, fechaHasta, legajos, feriados, vacaciones }) {
+  async function downloadExcel({ filePath, fechaDesde, fechaHasta, legajos, feriados, vacaciones, medioDiaMinutos }) {
     const authHeaders = await getAuthHeaders();
 
     const response = await fetch(`${baseUrl}/api/fichadas/download`, {
@@ -78,7 +78,7 @@ export function useFichadas() {
         ...authHeaders,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ filePath, fechaDesde, fechaHasta, legajos, feriados, vacaciones }),
+      body: JSON.stringify({ filePath, fechaDesde, fechaHasta, legajos, feriados, vacaciones, medioDiaMinutos }),
     });
 
     if (!response.ok) {

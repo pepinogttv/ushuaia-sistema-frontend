@@ -13,11 +13,19 @@ const fechaDesde = ref("");
 const fechaHasta = ref("");
 const selectedLegajos = ref([]);
 
-// Paso 2: Feriados y Vacaciones
+// Paso 2: Feriados y Marcas
 const feriados = ref([]);
 const fechasEnRango = ref([]);
-const vacaciones = ref({}); // { legajo: ["YYYY-MM-DD", ...] }
-const vacacionesExpandido = ref(null); // legajo del empleado expandido
+const vacaciones = ref({}); // { legajo: { fecha: tipo } }
+const vacacionesExpandido = ref(null);
+const medioDiaMinutos = ref(285); // 4:45 default
+
+// Context menu state
+const showMenu = ref(false);
+const menuX = ref(0);
+const menuY = ref(0);
+const menuLegajo = ref(null);
+const menuFecha = ref(null);
 
 // Paso 3: Preview
 const previewData = ref(null);
@@ -80,7 +88,7 @@ function goToFeriados() {
   // Inicializar vacaciones vacías para cada legajo seleccionado
   const vac = {};
   for (const l of selectedLegajos.value) {
-    vac[l] = [];
+    vac[l] = {};
   }
   vacaciones.value = vac;
   vacacionesExpandido.value = null;
@@ -99,6 +107,7 @@ async function goToPreview() {
       legajos: selectedLegajos.value,
       feriados: feriados.value,
       vacaciones: vacaciones.value,
+      medioDiaMinutos: medioDiaMinutos.value,
     });
     previewData.value = result;
     step.value = 3;
@@ -121,6 +130,7 @@ async function handleDownload() {
       legajos: selectedLegajos.value,
       feriados: feriados.value,
       vacaciones: vacaciones.value,
+      medioDiaMinutos: medioDiaMinutos.value,
     });
   } catch (e) {
     error.value = e.message;
@@ -153,21 +163,96 @@ function formatFechaLabel(fechaStr) {
   return `${dia} ${dd}/${mm}`;
 }
 
-function toggleVacacion(legajo, fecha) {
-  const arr = vacaciones.value[legajo] || [];
-  const idx = arr.indexOf(fecha);
-  if (idx >= 0) {
-    arr.splice(idx, 1);
+// Click izquierdo: toggle vacacion completa
+function onChipClick(legajo, fecha) {
+  const marcas = vacaciones.value[legajo] || {};
+  if (marcas[fecha]) {
+    delete marcas[fecha];
   } else {
-    arr.push(fecha);
+    marcas[fecha] = "vacacion";
   }
-  vacaciones.value[legajo] = arr;
+  vacaciones.value[legajo] = { ...marcas };
+}
+
+// Click derecho: abrir context menu
+function onChipRightClick(event, legajo, fecha) {
+  event.preventDefault();
+  menuX.value = event.clientX;
+  menuY.value = event.clientY;
+  menuLegajo.value = legajo;
+  menuFecha.value = fecha;
+  showMenu.value = true;
+}
+
+// Seleccionar tipo desde context menu
+function setMarca(tipo) {
+  const legajo = menuLegajo.value;
+  const fecha = menuFecha.value;
+  if (!legajo || !fecha) return;
+  const marcas = vacaciones.value[legajo] || {};
+  marcas[fecha] = tipo;
+  vacaciones.value[legajo] = { ...marcas };
+  showMenu.value = false;
+}
+
+function quitarMarca() {
+  const legajo = menuLegajo.value;
+  const fecha = menuFecha.value;
+  if (!legajo || !fecha) return;
+  const marcas = vacaciones.value[legajo] || {};
+  delete marcas[fecha];
+  vacaciones.value[legajo] = { ...marcas };
+  showMenu.value = false;
+}
+
+// Color y label para chips según tipo de marca
+function getChipColor(legajo, fecha) {
+  const tipo = (vacaciones.value[legajo] || {})[fecha];
+  if (!tipo) return "default";
+  if (tipo === "vacacion" || tipo === "vacacion_medio") return "info";
+  if (tipo === "autoriza_gaston" || tipo === "autoriza_dario") return "purple";
+  return "default";
+}
+
+function getChipVariant(legajo, fecha) {
+  const tipo = (vacaciones.value[legajo] || {})[fecha];
+  return tipo ? "flat" : "outlined";
+}
+
+function getChipSuffix(legajo, fecha) {
+  const tipo = (vacaciones.value[legajo] || {})[fecha];
+  if (tipo === "vacacion_medio") return " \u00BD";
+  if (tipo === "autoriza_gaston") return " G";
+  if (tipo === "autoriza_dario") return " D";
+  return "";
+}
+
+// Resumen de marcas para el title del expansion panel
+function getMarcasResumen(legajo) {
+  const marcas = vacaciones.value[legajo] || {};
+  const tipos = Object.values(marcas);
+  if (tipos.length === 0) return "";
+  const vac = tipos.filter((t) => t === "vacacion").length;
+  const medio = tipos.filter((t) => t === "vacacion_medio").length;
+  const aut = tipos.filter((t) => t === "autoriza_gaston" || t === "autoriza_dario").length;
+  const parts = [];
+  if (vac) parts.push(`${vac} vac`);
+  if (medio) parts.push(`${medio} \u00BD`);
+  if (aut) parts.push(`${aut} aut.`);
+  return parts.join(", ");
 }
 
 function getNombreLegajo(legajo) {
   const found = uploadData.value?.legajos.find((l) => l.legajo === legajo);
   return found ? found.nombre : legajo;
 }
+
+// Computed: formato legible de medioDiaMinutos
+const medioDiaLabel = computed(() => {
+  const h = Math.floor(medioDiaMinutos.value / 60);
+  const m = medioDiaMinutos.value % 60;
+  return `${h}:${String(m).padStart(2, "0")}`;
+});
 
 function toggleAllLegajos() {
   if (selectedLegajos.value.length === uploadData.value.legajos.length) {
@@ -322,15 +407,36 @@ function toggleAllLegajos() {
             </v-card-text>
           </v-card>
 
-          <!-- Vacaciones -->
+          <!-- Marcas por empleado (vacaciones, autorizaciones) -->
           <v-card class="mb-4">
             <v-card-title class="text-subtitle-1">
-              Marcar vacaciones por empleado
+              Marcas por empleado
             </v-card-title>
             <v-card-subtitle>
-              Selecciona un empleado y marca los días de vacaciones.
+              Click = vacaciones. Click derecho = otras opciones (1/2, autorizaciones).
             </v-card-subtitle>
             <v-card-text>
+              <div class="d-flex align-center ga-3 mb-4">
+                <span class="text-caption text-grey">Medio d&iacute;a (L-V):</span>
+                <v-text-field
+                  v-model="medioDiaLabel"
+                  density="compact"
+                  variant="outlined"
+                  style="max-width: 100px"
+                  hide-details
+                  readonly
+                />
+                <v-slider
+                  v-model="medioDiaMinutos"
+                  :min="180"
+                  :max="420"
+                  :step="15"
+                  density="compact"
+                  hide-details
+                  style="max-width: 250px"
+                  color="primary"
+                />
+              </div>
               <v-expansion-panels v-model="vacacionesExpandido">
                 <v-expansion-panel
                   v-for="legajo in selectedLegajos"
@@ -341,12 +447,13 @@ function toggleAllLegajos() {
                     <div class="d-flex align-center w-100">
                       <span>{{ legajo }} - {{ getNombreLegajo(legajo) }}</span>
                       <v-chip
-                        v-if="(vacaciones[legajo] || []).length > 0"
+                        v-if="getMarcasResumen(legajo)"
                         size="x-small"
                         color="info"
+                        variant="tonal"
                         class="ml-2"
                       >
-                        {{ (vacaciones[legajo] || []).length }} días
+                        {{ getMarcasResumen(legajo) }}
                       </v-chip>
                     </div>
                   </v-expansion-panel-title>
@@ -355,12 +462,13 @@ function toggleAllLegajos() {
                       <v-chip
                         v-for="f in fechasEnRango"
                         :key="f"
-                        :color="(vacaciones[legajo] || []).includes(f) ? 'info' : 'default'"
-                        :variant="(vacaciones[legajo] || []).includes(f) ? 'flat' : 'outlined'"
+                        :color="getChipColor(legajo, f)"
+                        :variant="getChipVariant(legajo, f)"
                         size="small"
-                        @click="toggleVacacion(legajo, f)"
+                        @click="onChipClick(legajo, f)"
+                        @contextmenu="onChipRightClick($event, legajo, f)"
                       >
-                        {{ formatFechaLabel(f) }}
+                        {{ formatFechaLabel(f) }}{{ getChipSuffix(legajo, f) }}
                       </v-chip>
                     </div>
                   </v-expansion-panel-text>
@@ -368,6 +476,34 @@ function toggleAllLegajos() {
               </v-expansion-panels>
             </v-card-text>
           </v-card>
+
+          <!-- Context menu -->
+          <v-menu
+            v-model="showMenu"
+            :style="{ position: 'fixed', left: menuX + 'px', top: menuY + 'px' }"
+            :target="[menuX, menuY]"
+            location="end"
+          >
+            <v-list density="compact">
+              <v-list-item @click="setMarca('vacacion')">
+                <v-list-item-title>Vacaciones</v-list-item-title>
+              </v-list-item>
+              <v-list-item @click="setMarca('vacacion_medio')">
+                <v-list-item-title>Vacaciones &frac12;</v-list-item-title>
+              </v-list-item>
+              <v-divider />
+              <v-list-item @click="setMarca('autoriza_gaston')">
+                <v-list-item-title>Autoriza Gaston</v-list-item-title>
+              </v-list-item>
+              <v-list-item @click="setMarca('autoriza_dario')">
+                <v-list-item-title>Autoriza Dario</v-list-item-title>
+              </v-list-item>
+              <v-divider />
+              <v-list-item @click="quitarMarca()">
+                <v-list-item-title class="text-red">Quitar marca</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
 
           <div class="d-flex">
             <v-btn variant="text" @click="step = 1">Volver</v-btn>
@@ -423,7 +559,8 @@ function toggleAllLegajos() {
                     :class="{
                       'bg-red-lighten-5': fila.incompleta,
                       'bg-green-lighten-5': fila.observacion === 'FERIADO',
-                      'bg-blue-lighten-5': fila.observacion === 'VACACIONES',
+                      'bg-blue-lighten-5': fila.observacion === 'VACACIONES' || fila.observacion === 'VACACIONES 1/2',
+                      'bg-purple-lighten-5': fila.observacion.includes('AUT.'),
                     }"
                   >
                     <td>{{ fila.fecha }}</td>
@@ -434,7 +571,7 @@ function toggleAllLegajos() {
                     <td>{{ fila.s2 }}</td>
                     <td class="font-weight-medium">{{ fila.hn }}</td>
                     <td class="font-weight-medium">{{ fila.ex }}</td>
-                    <td :class="{ 'text-red': fila.incompleta, 'text-green': fila.observacion === 'FERIADO', 'text-blue': fila.observacion === 'VACACIONES' }">
+                    <td :class="{ 'text-red': fila.incompleta, 'text-green': fila.observacion === 'FERIADO', 'text-blue': fila.observacion.includes('VACACIONES'), 'text-purple': fila.observacion.includes('AUT.') }">
                       {{ fila.observacion }}
                     </td>
                     <td class="text-grey">{{ fila.horario }}</td>
