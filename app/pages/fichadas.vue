@@ -1,3 +1,4 @@
+
 <script setup>
 const { uploadTxt, processFichadas, downloadExcel } = useFichadas();
 
@@ -12,9 +13,11 @@ const fechaDesde = ref("");
 const fechaHasta = ref("");
 const selectedLegajos = ref([]);
 
-// Paso 2: Feriados
+// Paso 2: Feriados y Vacaciones
 const feriados = ref([]);
 const fechasEnRango = ref([]);
+const vacaciones = ref({}); // { legajo: ["YYYY-MM-DD", ...] }
+const vacacionesExpandido = ref(null); // legajo del empleado expandido
 
 // Paso 3: Preview
 const previewData = ref(null);
@@ -74,6 +77,13 @@ function goToFeriados() {
   }
   fechasEnRango.value = fechas;
   feriados.value = [];
+  // Inicializar vacaciones vacías para cada legajo seleccionado
+  const vac = {};
+  for (const l of selectedLegajos.value) {
+    vac[l] = [];
+  }
+  vacaciones.value = vac;
+  vacacionesExpandido.value = null;
   step.value = 2;
 }
 
@@ -88,6 +98,7 @@ async function goToPreview() {
       fechaHasta: fechaHasta.value,
       legajos: selectedLegajos.value,
       feriados: feriados.value,
+      vacaciones: vacaciones.value,
     });
     previewData.value = result;
     step.value = 3;
@@ -109,6 +120,7 @@ async function handleDownload() {
       fechaHasta: fechaHasta.value,
       legajos: selectedLegajos.value,
       feriados: feriados.value,
+      vacaciones: vacaciones.value,
     });
   } catch (e) {
     error.value = e.message;
@@ -124,6 +136,8 @@ function resetAll() {
   fechaHasta.value = "";
   selectedLegajos.value = [];
   feriados.value = [];
+  vacaciones.value = {};
+  vacacionesExpandido.value = null;
   fechasEnRango.value = [];
   previewData.value = null;
   error.value = "";
@@ -137,6 +151,22 @@ function formatFechaLabel(fechaStr) {
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   return `${dia} ${dd}/${mm}`;
+}
+
+function toggleVacacion(legajo, fecha) {
+  const arr = vacaciones.value[legajo] || [];
+  const idx = arr.indexOf(fecha);
+  if (idx >= 0) {
+    arr.splice(idx, 1);
+  } else {
+    arr.push(fecha);
+  }
+  vacaciones.value[legajo] = arr;
+}
+
+function getNombreLegajo(legajo) {
+  const found = uploadData.value?.legajos.find((l) => l.legajo === legajo);
+  return found ? found.nombre : legajo;
 }
 
 function toggleAllLegajos() {
@@ -262,8 +292,9 @@ function toggleAllLegajos() {
           </template>
         </template>
 
-        <!-- PASO 2: Feriados -->
+        <!-- PASO 2: Feriados y Vacaciones -->
         <template v-if="step === 2">
+          <!-- Feriados -->
           <v-card class="mb-4">
             <v-card-title class="text-subtitle-1">
               Marcar feriados en el período {{ fechaDesde }} a {{ fechaHasta }}
@@ -289,15 +320,62 @@ function toggleAllLegajos() {
                 </v-chip>
               </div>
             </v-card-text>
-
-            <v-card-actions>
-              <v-btn variant="text" @click="step = 1">Volver</v-btn>
-              <v-spacer />
-              <v-btn color="primary" variant="flat" :loading="loading" @click="goToPreview">
-                Ver Preview
-              </v-btn>
-            </v-card-actions>
           </v-card>
+
+          <!-- Vacaciones -->
+          <v-card class="mb-4">
+            <v-card-title class="text-subtitle-1">
+              Marcar vacaciones por empleado
+            </v-card-title>
+            <v-card-subtitle>
+              Selecciona un empleado y marca los días de vacaciones.
+            </v-card-subtitle>
+            <v-card-text>
+              <v-expansion-panels v-model="vacacionesExpandido">
+                <v-expansion-panel
+                  v-for="legajo in selectedLegajos"
+                  :key="legajo"
+                  :value="legajo"
+                >
+                  <v-expansion-panel-title>
+                    <div class="d-flex align-center w-100">
+                      <span>{{ legajo }} - {{ getNombreLegajo(legajo) }}</span>
+                      <v-chip
+                        v-if="(vacaciones[legajo] || []).length > 0"
+                        size="x-small"
+                        color="info"
+                        class="ml-2"
+                      >
+                        {{ (vacaciones[legajo] || []).length }} días
+                      </v-chip>
+                    </div>
+                  </v-expansion-panel-title>
+                  <v-expansion-panel-text>
+                    <div class="d-flex flex-wrap ga-2">
+                      <v-chip
+                        v-for="f in fechasEnRango"
+                        :key="f"
+                        :color="(vacaciones[legajo] || []).includes(f) ? 'info' : 'default'"
+                        :variant="(vacaciones[legajo] || []).includes(f) ? 'flat' : 'outlined'"
+                        size="small"
+                        @click="toggleVacacion(legajo, f)"
+                      >
+                        {{ formatFechaLabel(f) }}
+                      </v-chip>
+                    </div>
+                  </v-expansion-panel-text>
+                </v-expansion-panel>
+              </v-expansion-panels>
+            </v-card-text>
+          </v-card>
+
+          <div class="d-flex">
+            <v-btn variant="text" @click="step = 1">Volver</v-btn>
+            <v-spacer />
+            <v-btn color="primary" variant="flat" :loading="loading" @click="goToPreview">
+              Ver Preview
+            </v-btn>
+          </div>
         </template>
 
         <!-- PASO 3: Preview y descarga -->
@@ -345,6 +423,7 @@ function toggleAllLegajos() {
                     :class="{
                       'bg-red-lighten-5': fila.incompleta,
                       'bg-green-lighten-5': fila.observacion === 'FERIADO',
+                      'bg-blue-lighten-5': fila.observacion === 'VACACIONES',
                     }"
                   >
                     <td>{{ fila.fecha }}</td>
@@ -355,7 +434,7 @@ function toggleAllLegajos() {
                     <td>{{ fila.s2 }}</td>
                     <td class="font-weight-medium">{{ fila.hn }}</td>
                     <td class="font-weight-medium">{{ fila.ex }}</td>
-                    <td :class="{ 'text-red': fila.incompleta, 'text-green': fila.observacion === 'FERIADO' }">
+                    <td :class="{ 'text-red': fila.incompleta, 'text-green': fila.observacion === 'FERIADO', 'text-blue': fila.observacion === 'VACACIONES' }">
                       {{ fila.observacion }}
                     </td>
                     <td class="text-grey">{{ fila.horario }}</td>
