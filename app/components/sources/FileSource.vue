@@ -6,7 +6,7 @@ const props = defineProps({
   },
 });
 
-const { sourceUploadFile, sourceListFiles, sourceDeleteFile } =
+const { sourceUploadFile, sourceListFiles, sourceDeleteFile, sourceDownloadFile } =
   useExternalBackend();
 
 // Archivos (se cargarán desde el backend)
@@ -170,12 +170,13 @@ const formatDate = (dateString) => {
         </v-list-item-subtitle>
 
         <template v-slot:append>
-          <!-- <v-btn
+          <v-btn
             icon="mdi-download"
             variant="text"
             size="small"
             color="primary"
-          /> -->
+            @click="sourceDownloadFile(props.source.name, file.id)"
+          />
           <v-btn
             icon="mdi-delete"
             variant="text"

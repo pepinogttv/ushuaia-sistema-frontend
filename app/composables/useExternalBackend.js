@@ -176,6 +176,68 @@ export function useExternalBackend() {
     );
   };
 
+  /**
+   * Descarga un archivo de un source específico
+   * @param {string} sourceName - Nombre del source
+   * @param {string} filename - Nombre del archivo a descargar
+   */
+  const sourceDownloadFile = async (sourceName, filename) => {
+    if (!sourceName) {
+      throw new Error("sourceName es requerido");
+    }
+    if (!filename) {
+      throw new Error("filename es requerido");
+    }
+
+    const {
+      data: { session },
+      error: sessionError,
+    } = await client.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      throw new Error("No se pudo obtener el token de autenticación");
+    }
+
+    const url = `${baseUrl}/api/sources/${sourceName}/files/${encodeURIComponent(filename)}/download`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (!response.ok) {
+      let errorMsg;
+      try {
+        const data = await response.json();
+        errorMsg = data.error?.description || data.message;
+      } catch {
+        errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+      }
+      throw new Error(errorMsg || "Error al descargar el archivo");
+    }
+
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.description || errorData.message || "Error al descargar");
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      URL.revokeObjectURL(downloadUrl);
+    }
+  };
+
   const executeSource = async (sourceName) => {
     if (!sourceName) {
       throw new Error("sourceName es requerido");
@@ -639,6 +701,7 @@ export function useExternalBackend() {
     sourceUploadFile,
     sourceListFiles,
     sourceDeleteFile,
+    sourceDownloadFile,
     deleteSource,
     executeSource,
     cancelSourceExecution,

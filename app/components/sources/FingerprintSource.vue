@@ -10,6 +10,7 @@ const client = useSupabaseClient();
 const {
   sourceListFiles,
   sourceDeleteFile,
+  sourceDownloadFile,
   validateFingerprintUpload,
   executeSourceWithFile,
 } = useExternalBackend();
@@ -352,6 +353,13 @@ const hasEnrichmentRules = computed(() => {
         </v-list-item-subtitle>
 
         <template v-slot:append>
+          <v-btn
+            icon="mdi-download"
+            variant="text"
+            size="small"
+            color="primary"
+            @click="sourceDownloadFile(props.source.name, file.id)"
+          />
           <v-btn
             icon="mdi-delete"
             variant="text"
