@@ -206,11 +206,15 @@ function quitarMarca() {
 }
 
 // Color y label para chips según tipo de marca
+const TIPOS_VACACIONES = new Set(["vacacion", "vacacion_medio"]);
+const TIPOS_ENFERMO = new Set(["enfermo_gaston", "enfermo_dario"]);
+const TIPOS_TARDE_OK = new Set(["tarde_ok_gaston", "tarde_ok_dario"]);
+
 function getChipColor(legajo, fecha) {
   const tipo = (vacaciones.value[legajo] || {})[fecha];
   if (!tipo) return "default";
-  if (tipo === "vacacion" || tipo === "vacacion_medio") return "info";
-  if (tipo === "autoriza_gaston" || tipo === "autoriza_dario") return "purple";
+  if (TIPOS_VACACIONES.has(tipo)) return "info";
+  if (TIPOS_ENFERMO.has(tipo) || TIPOS_TARDE_OK.has(tipo)) return "purple";
   return "default";
 }
 
@@ -222,8 +226,10 @@ function getChipVariant(legajo, fecha) {
 function getChipSuffix(legajo, fecha) {
   const tipo = (vacaciones.value[legajo] || {})[fecha];
   if (tipo === "vacacion_medio") return " \u00BD";
-  if (tipo === "autoriza_gaston") return " G";
-  if (tipo === "autoriza_dario") return " D";
+  if (tipo === "enfermo_gaston") return " Enf.G";
+  if (tipo === "enfermo_dario") return " Enf.D";
+  if (tipo === "tarde_ok_gaston") return " T.OK G";
+  if (tipo === "tarde_ok_dario") return " T.OK D";
   return "";
 }
 
@@ -234,11 +240,13 @@ function getMarcasResumen(legajo) {
   if (tipos.length === 0) return "";
   const vac = tipos.filter((t) => t === "vacacion").length;
   const medio = tipos.filter((t) => t === "vacacion_medio").length;
-  const aut = tipos.filter((t) => t === "autoriza_gaston" || t === "autoriza_dario").length;
+  const enf = tipos.filter((t) => TIPOS_ENFERMO.has(t)).length;
+  const tok = tipos.filter((t) => TIPOS_TARDE_OK.has(t)).length;
   const parts = [];
   if (vac) parts.push(`${vac} vac`);
   if (medio) parts.push(`${medio} \u00BD`);
-  if (aut) parts.push(`${aut} aut.`);
+  if (enf) parts.push(`${enf} enf`);
+  if (tok) parts.push(`${tok} t.ok`);
   return parts.join(", ");
 }
 
@@ -264,7 +272,7 @@ function toggleAllLegajos() {
 </script>
 
 <template>
-  <v-container fluid class="pa-6">
+  <v-container class="py-6" style="max-width: 1200px;">
     <v-row>
       <v-col cols="12">
         <div class="d-flex align-center mb-4">
@@ -291,6 +299,39 @@ function toggleAllLegajos() {
             <v-stepper-item :value="3" title="Preview y Descarga" />
           </v-stepper-header>
         </v-stepper>
+
+        <!-- Action bar sticky -->
+        <div
+          v-if="(step === 1 && uploadData) || step === 2 || (step === 3 && previewData)"
+          class="action-bar mb-4"
+        >
+          <template v-if="step === 1 && uploadData">
+            <v-spacer />
+            <v-btn color="primary" variant="flat" :loading="loading" @click="goToFeriados">
+              Continuar
+            </v-btn>
+          </template>
+          <template v-if="step === 2">
+            <v-btn variant="text" @click="step = 1">Volver</v-btn>
+            <v-spacer />
+            <v-btn color="primary" variant="flat" :loading="loading" @click="goToPreview">
+              Ver Preview
+            </v-btn>
+          </template>
+          <template v-if="step === 3 && previewData">
+            <v-btn variant="text" @click="step = 2">Volver a Feriados</v-btn>
+            <v-spacer />
+            <v-btn
+              color="success"
+              variant="flat"
+              prepend-icon="mdi-download"
+              :loading="loading"
+              @click="handleDownload"
+            >
+              Descargar Excel
+            </v-btn>
+          </template>
+        </div>
 
         <!-- Error alert -->
         <v-alert v-if="error" type="error" variant="tonal" closable class="mb-4" @click:close="error = ''">
@@ -366,13 +407,6 @@ function toggleAllLegajos() {
                   </v-chip>
                 </div>
               </v-card-text>
-
-              <v-card-actions>
-                <v-spacer />
-                <v-btn color="primary" variant="flat" :loading="loading" @click="goToFeriados">
-                  Continuar
-                </v-btn>
-              </v-card-actions>
             </v-card>
           </template>
         </template>
@@ -413,7 +447,7 @@ function toggleAllLegajos() {
               Marcas por empleado
             </v-card-title>
             <v-card-subtitle>
-              Click = vacaciones. Click derecho = otras opciones (1/2, autorizaciones).
+              Click = vacaciones. Click derecho = otras opciones (1/2, enfermo, tarde OK).
             </v-card-subtitle>
             <v-card-text>
               <div class="d-flex align-center ga-3 mb-4">
@@ -492,11 +526,18 @@ function toggleAllLegajos() {
                 <v-list-item-title>Vacaciones &frac12;</v-list-item-title>
               </v-list-item>
               <v-divider />
-              <v-list-item @click="setMarca('autoriza_gaston')">
-                <v-list-item-title>Autoriza Gaston</v-list-item-title>
+              <v-list-item @click="setMarca('enfermo_gaston')">
+                <v-list-item-title>Enfermo (Gaston)</v-list-item-title>
               </v-list-item>
-              <v-list-item @click="setMarca('autoriza_dario')">
-                <v-list-item-title>Autoriza Dario</v-list-item-title>
+              <v-list-item @click="setMarca('enfermo_dario')">
+                <v-list-item-title>Enfermo (Dario)</v-list-item-title>
+              </v-list-item>
+              <v-divider />
+              <v-list-item @click="setMarca('tarde_ok_gaston')">
+                <v-list-item-title>Tarde OK (Gaston)</v-list-item-title>
+              </v-list-item>
+              <v-list-item @click="setMarca('tarde_ok_dario')">
+                <v-list-item-title>Tarde OK (Dario)</v-list-item-title>
               </v-list-item>
               <v-divider />
               <v-list-item @click="quitarMarca()">
@@ -504,51 +545,28 @@ function toggleAllLegajos() {
               </v-list-item>
             </v-list>
           </v-menu>
-
-          <div class="d-flex">
-            <v-btn variant="text" @click="step = 1">Volver</v-btn>
-            <v-spacer />
-            <v-btn color="primary" variant="flat" :loading="loading" @click="goToPreview">
-              Ver Preview
-            </v-btn>
-          </div>
         </template>
 
         <!-- PASO 3: Preview y descarga -->
         <template v-if="step === 3 && previewData">
-          <v-card class="mb-4">
-            <v-card-title class="d-flex align-center">
-              <span class="text-subtitle-1">Preview de Fichadas</span>
-              <v-spacer />
-              <v-btn
-                color="success"
-                variant="flat"
-                prepend-icon="mdi-download"
-                :loading="loading"
-                @click="handleDownload"
-              >
-                Descargar Excel
-              </v-btn>
-            </v-card-title>
-          </v-card>
-
-          <v-card v-for="emp in previewData" :key="emp.legajo" class="mb-6">
-            <v-card-title class="text-subtitle-2 py-2 bg-grey-lighten-4">
-              {{ emp.legajo }} - {{ emp.nombre }}
-            </v-card-title>
-            <v-card-text class="pa-0">
-              <v-table dense class="fichadas-table">
+          <v-card v-for="emp in previewData" :key="emp.legajo" class="mb-4" variant="outlined">
+            <div class="emp-header">
+              <span class="emp-legajo">{{ emp.legajo }}</span>
+              <span class="emp-nombre">{{ emp.nombre }}</span>
+            </div>
+            <div class="table-wrap">
+              <table class="fichadas-table">
                 <thead>
                   <tr>
                     <th>FECHA</th>
                     <th>DIA</th>
-                    <th>E1</th>
-                    <th>S1</th>
-                    <th>E2</th>
-                    <th>S2</th>
+                    <template v-for="i in (emp.maxPares || 2)" :key="i">
+                      <th>E{{ i }}</th>
+                      <th>S{{ i }}</th>
+                    </template>
                     <th>HN</th>
                     <th>EX</th>
-                    <th>OBS</th>
+                    <th class="th-obs">OBS</th>
                     <th>HORARIO</th>
                   </tr>
                 </thead>
@@ -557,47 +575,60 @@ function toggleAllLegajos() {
                     v-for="(fila, idx) in emp.filas"
                     :key="idx"
                     :class="{
-                      'bg-red-lighten-5': fila.incompleta,
-                      'bg-green-lighten-5': fila.observacion === 'FERIADO',
-                      'bg-blue-lighten-5': fila.observacion === 'VACACIONES' || fila.observacion === 'VACACIONES 1/2',
-                      'bg-purple-lighten-5': fila.observacion.includes('AUT.'),
+                      'row-error': fila.incompleta || fila.ausenciaInjustificada,
+                      'row-warn': fila.irregular || fila.anomalia,
+                      'row-feriado': fila.feriado,
+                      'row-vacaciones': fila.vacaciones,
+                      'row-autorizacion': fila.autorizacion,
+                      'row-descanso': (fila.descanso || fila.domingo) && !fila.anomalia,
                     }"
                   >
                     <td>{{ fila.fecha }}</td>
                     <td>{{ fila.dia }}</td>
-                    <td>{{ fila.e1 }}</td>
-                    <td>{{ fila.s1 }}</td>
-                    <td>{{ fila.e2 }}</td>
-                    <td>{{ fila.s2 }}</td>
-                    <td class="font-weight-medium">{{ fila.hn }}</td>
-                    <td class="font-weight-medium">{{ fila.ex }}</td>
-                    <td :class="{ 'text-red': fila.incompleta, 'text-green': fila.observacion === 'FERIADO', 'text-blue': fila.observacion.includes('VACACIONES'), 'text-purple': fila.observacion.includes('AUT.') }">
+                    <template v-for="i in (emp.maxPares || 2)" :key="i">
+                      <td :class="{ 'cell-tarde': fila.slots?.[(i - 1) * 2]?.tarde }">
+                        {{ fila.slots?.[(i - 1) * 2]?.hora || '' }}
+                        <span v-if="fila.slots?.[(i - 1) * 2]?.real" class="cell-real"> ({{ fila.slots[(i - 1) * 2].real }})</span>
+                      </td>
+                      <td>{{ fila.slots?.[(i - 1) * 2 + 1]?.hora || '' }}</td>
+                    </template>
+                    <td class="cell-num">{{ fila.hn }}</td>
+                    <td class="cell-num" :class="{ 'text-orange': fila.exExcesiva }">{{ fila.ex }}</td>
+                    <td :class="{
+                      'obs-error': fila.incompleta || fila.ausenciaInjustificada,
+                      'obs-warn': fila.irregular || fila.anomalia,
+                      'obs-feriado': fila.feriado,
+                      'obs-vacaciones': fila.vacaciones,
+                      'obs-autorizacion': fila.autorizacion,
+                      'obs-descanso': (fila.descanso || fila.domingo) && !fila.anomalia,
+                    }">
                       {{ fila.observacion }}
                     </td>
-                    <td class="text-grey">{{ fila.horario }}</td>
+                    <td class="cell-horario">{{ fila.horario }}</td>
                   </tr>
                 </tbody>
                 <tfoot>
-                  <tr class="font-weight-bold bg-grey-lighten-4">
-                    <td colspan="6" class="text-right">SUBTOTAL</td>
-                    <td>{{ emp.subtotalHN }}</td>
-                    <td>{{ emp.subtotalEX }}</td>
-                    <td class="text-red font-weight-bold">TOTAL EXTRAS 100%</td>
+                  <tr class="foot-subtotal">
+                    <td :colspan="2 + (emp.maxPares || 2) * 2">SUBTOTAL</td>
+                    <td class="cell-num">{{ emp.subtotalHN }}</td>
+                    <td class="cell-num">{{ emp.subtotalEX }}</td>
+                    <td class="foot-extras">TOTAL EXTRAS 100%</td>
                     <td />
                   </tr>
-                  <tr class="font-weight-bold">
-                    <td colspan="6" class="text-right">TOTAL HORAS</td>
-                    <td>{{ emp.totalHoras }}</td>
+                  <tr class="foot-total">
+                    <td :colspan="2 + (emp.maxPares || 2) * 2">TOTAL HORAS</td>
+                    <td class="cell-num">{{ emp.totalHoras }}</td>
+                    <td colspan="3" />
+                  </tr>
+                  <tr class="foot-total">
+                    <td :colspan="2 + (emp.maxPares || 2) * 2">LLEGADAS TARDE</td>
+                    <td class="cell-num" :class="{ 'text-orange': emp.totalTardes > 0 }">{{ emp.totalTardes || 0 }}</td>
                     <td colspan="3" />
                   </tr>
                 </tfoot>
-              </v-table>
-            </v-card-text>
+              </table>
+            </div>
           </v-card>
-
-          <div class="d-flex mb-6">
-            <v-btn variant="text" @click="step = 2">Volver a Feriados</v-btn>
-          </div>
         </template>
 
         <!-- Loading overlay -->
@@ -610,10 +641,127 @@ function toggleAllLegajos() {
 </template>
 
 <style scoped>
-.fichadas-table th,
-.fichadas-table td {
-  font-size: 0.8rem !important;
-  padding: 4px 8px !important;
+.action-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  min-height: 52px;
+}
+
+.emp-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fafafa;
+}
+.emp-legajo {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  letter-spacing: 0.4px;
+}
+.emp-nombre {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #222;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.fichadas-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.fichadas-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f5f5f5;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.3px;
+  color: #555;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
   white-space: nowrap;
 }
+
+.fichadas-table tbody td {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  white-space: nowrap;
+  color: #333;
+}
+
+.fichadas-table tbody tr:hover {
+  background: rgba(0, 0, 0, 0.025);
+}
+
+.cell-num {
+  font-weight: 500;
+}
+.cell-horario {
+  color: #999;
+  font-size: 0.72rem;
+}
+.cell-real {
+  color: #999;
+  font-size: 0.7rem;
+}
+.cell-tarde {
+  color: #e65100;
+  font-weight: 600;
+}
+
+/* Row backgrounds — más sutiles que los lighten-5 de Vuetify */
+.row-error    { background: #fdecec; }
+.row-warn     { background: #fff4e5; }
+.row-feriado  { background: #e8f5e9; }
+.row-vacaciones { background: #e3f2fd; }
+.row-autorizacion { background: #f3e5f5; }
+.row-descanso { background: #f0f0f0; color: #888; }
+
+.row-error:hover    { background: #fbe0e0; }
+.row-warn:hover     { background: #ffebd0; }
+.row-feriado:hover  { background: #dcedde; }
+.row-vacaciones:hover { background: #d4e9fa; }
+.row-autorizacion:hover { background: #ecd9f0; }
+.row-descanso:hover { background: #e6e6e6; }
+
+/* OBS column colors */
+.obs-error    { color: #c62828; font-weight: 600; }
+.obs-warn     { color: #ef6c00; }
+.obs-feriado  { color: #2e7d32; }
+.obs-vacaciones { color: #1565c0; }
+.obs-autorizacion { color: #6a1b9a; }
+.obs-descanso { color: #888; }
+
+/* tfoot */
+.fichadas-table tfoot td {
+  padding: 6px 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.foot-subtotal { background: #f5f5f5; }
+.foot-total td { background: #fafafa; }
+.foot-extras { color: #c62828; font-weight: 700; }
+
+.text-orange { color: #e65100; }
 </style>
