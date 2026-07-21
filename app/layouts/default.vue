@@ -15,16 +15,12 @@ const signOut = async () => {
 const navItems = [
   { title: "Proveedores", icon: "mdi-truck-delivery", to: "/providers" },
   // { title: "Documentación", icon: "mdi-book-open-variant", to: "/docs" },
-  { title: "Chat IA", icon: "mdi-robot", to: "/chat" },
 ];
-
-const isFullBleedPage = computed(() => route.path.startsWith("/chat"));
 
 const currentTab = computed(() => {
   const path = route.path;
   if (path.startsWith("/providers")) return "/providers";
   if (path.startsWith("/docs")) return "/docs";
-  if (path.startsWith("/chat")) return "/chat";
   return "/providers";
 });
 
@@ -114,10 +110,7 @@ const userInitials = computed(() => {
     </v-app-bar>
 
     <v-main class="main-content">
-      <template v-if="isFullBleedPage">
-        <slot />
-      </template>
-      <v-container v-else fluid class="pa-6">
+      <v-container fluid class="pa-6">
         <slot />
       </v-container>
     </v-main>
